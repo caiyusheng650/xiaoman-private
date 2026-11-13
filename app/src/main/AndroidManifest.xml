@@ -8,14 +8,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
-    <queries>
-        <intent>
-            <action android:name="android.speech.RecognitionService" />
-        </intent>
-    </queries>
-
     <application
         android:name=".XiaomanApp"
         android:allowBackup="false"
@@ -25,10 +17,6 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Xiaoman">
-        <activity
-            android:name=".assist.AssistantMicrophonePermissionActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.Material.NoActionBar.TranslucentDecor" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

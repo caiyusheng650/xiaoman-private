@@ -386,8 +386,7 @@ private fun AssistantGuideCard() {
         if (expanded) {
             GuideStep(R.string.assist_guide_default_title, R.string.assist_guide_default_body)
             GuideStep(R.string.assist_guide_launch_title, R.string.assist_guide_launch_body)
-            GuideStep(R.string.assist_guide_mic_title, R.string.assist_guide_mic_body)
-            GuideStep(R.string.assist_guide_help_title, R.string.assist_guide_help_body)
+            GuideStep(R.string.assist_guide_type_title, R.string.assist_guide_type_body)
         }
     }
 }

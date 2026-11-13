@@ -21,12 +21,9 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.xiaoman.api.ApprovalAnswer
 import dev.xiaoman.app.MainActivity
 import dev.xiaoman.app.Notifier
-import dev.xiaoman.app.R
 import dev.xiaoman.app.XiaomanApp
-import dev.xiaoman.app.session.AgentSession
 import dev.xiaoman.app.ui.XiaomanTheme
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -40,11 +37,7 @@ internal class XiaomanVoiceSession(context: Context) : VoiceInteractionSession(c
     override val savedStateRegistry get() = stateController.savedStateRegistry
 
     private val visible = mutableStateOf(false)
-    private val speechState = mutableStateOf(AssistantSpeech.State())
-    private val recognizedText = mutableStateOf("")
-    private val speech = AssistantSpeech(context, { speechState.value = it }, ::submitSpeech)
-    private var permissionObservation: Job? = null
-    private var speechQuestionId: Long? = null
+    private val draft = mutableStateOf("")
     private var content: ComposeView? = null
 
     override fun onCreate() {
@@ -52,23 +45,13 @@ internal class XiaomanVoiceSession(context: Context) : VoiceInteractionSession(c
         stateController.performAttach()
         stateController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
-        permissionObservation = graph.scope.launch(Dispatchers.Main.immediate) {
-            graph.assistantMicrophoneGranted.collect { granted ->
-                if (granted == null) return@collect
-                graph.assistantMicrophoneGranted.value = null
-                if (visible.value) {
-                    if (granted) startSpeechWhenReady()
-                    else speechState.value = AssistantSpeech.State(message = R.string.assist_speech_permission)
-                }
-            }
-        }
     }
 
     override fun onCreateContentView(): View {
         window.window?.apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             clearFlags(LayoutParams.FLAG_DIM_BEHIND)
-            setSoftInputMode(LayoutParams.SOFT_INPUT_ADJUST_RESIZE or LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+            setSoftInputMode(LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             WindowCompat.setDecorFitsSystemWindows(this, false)
         }
         return ComposeView(context).apply {
@@ -79,10 +62,8 @@ internal class XiaomanVoiceSession(context: Context) : VoiceInteractionSession(c
                     XiaomanTheme(graph.appearance) {
                         AssistantPanel(
                             session = session,
-                            speech = speechState.value,
-                            recognizedText = recognizedText.value,
-                            onMic = ::onMicrophone,
-                            onCancelSpeech = speech::cancel,
+                            draft = draft.value,
+                            onDraftChange = { draft.value = it },
                             onClose = ::hide,
                             onOpenChat = ::openChat,
                             onApprove = { id, scope ->
@@ -104,12 +85,14 @@ internal class XiaomanVoiceSession(context: Context) : VoiceInteractionSession(c
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         graph.assistantPanelVisible.value = true
         visible.value = true
-        if (!session.busy.value && speech.hasPermission) startSpeechWhenReady()
+    }
+
+    override fun onBackPressed() {
+        hide()
     }
 
     override fun onHide() {
         visible.value = false
-        speech.cancel()
         graph.assistantPanelVisible.value = false
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         super.onHide()
@@ -117,51 +100,11 @@ internal class XiaomanVoiceSession(context: Context) : VoiceInteractionSession(c
 
     override fun onDestroy() {
         visible.value = false
-        speech.cancel()
         graph.assistantPanelVisible.value = false
-        permissionObservation?.cancel()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         content?.disposeComposition()
         content = null
         super.onDestroy()
-    }
-
-    private fun startSpeechWhenReady() {
-        content?.post {
-            if (visible.value && session.approval.value == null &&
-                (!session.busy.value || session.question.value != null)
-            ) {
-                speechQuestionId = session.question.value?.id
-                speech.start(graph.appearance.language.value.tag)
-            }
-        }
-    }
-
-    private fun onMicrophone() {
-        if (speechState.value.listening) {
-            speech.stop()
-        } else if (speech.hasPermission) {
-            startSpeechWhenReady()
-        } else {
-            startAssistantActivity(Intent(context, AssistantMicrophonePermissionActivity::class.java))
-        }
-    }
-
-    private fun submitSpeech(text: String) {
-        recognizedText.value = text
-        if (!visible.value || session.approval.value != null || speechQuestionId != session.question.value?.id) {
-            speechState.value = AssistantSpeech.State(message = R.string.assist_speech_busy)
-            return
-        }
-        val questionId = speechQuestionId
-        val result = if (questionId != null) {
-            if (session.answerQuestion(text, questionId)) AgentSession.Submit.Answered else AgentSession.Submit.Busy
-        } else {
-            session.submit(text)
-        }
-        if (result == AgentSession.Submit.Busy) {
-            speechState.value = AssistantSpeech.State(message = R.string.assist_speech_busy)
-        }
     }
 
     private fun openChat() {

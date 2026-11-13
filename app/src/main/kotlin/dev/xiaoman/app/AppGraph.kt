@@ -108,7 +108,6 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
     val runIds = RunIds()
     val uiVisible = MutableStateFlow(false)
     val assistantPanelVisible = MutableStateFlow(false)
-    internal val assistantMicrophoneGranted = MutableStateFlow<Boolean?>(null)
 
     val traces by lazy {
         TraceWriter(
