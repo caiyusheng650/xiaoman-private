@@ -7,7 +7,9 @@ import dev.xiaoman.api.Observation
 import dev.xiaoman.api.Relation
 import dev.xiaoman.api.ReminderScheduler
 import dev.xiaoman.api.Skill
+import dev.xiaoman.api.SkillChange
 import dev.xiaoman.api.SkillRepository
+import dev.xiaoman.api.SkillStore
 import dev.xiaoman.api.ToolCall
 import dev.xiaoman.api.ToolProvider
 import kotlinx.coroutines.CancellationException
@@ -33,6 +35,10 @@ internal class ChatTools(
     private val external: ToolProvider?,
     private val phoneTasks: Boolean = true,
     private val phoneTask: suspend (goal: String, skill: String?) -> AgentEvent.PhoneTaskFinished,
+    /** When null, the skill_write / skill_delete tools are not offered at all. */
+    private val skillStore: SkillStore? = null,
+    /** Asks the user to confirm a skill change; null answer means the change is refused. */
+    private val confirmSkill: (suspend (prompt: String) -> Boolean)? = null,
 ) {
     suspend fun execute(call: ToolCall, taskId: String, emit: (AgentEvent) -> Unit): String = try {
         val args = parseArgs(call.argumentsJson)
@@ -42,6 +48,8 @@ internal class ChatTools(
             AgentTools.MEMORY_WRITE -> write(args, taskId, emit)
             AgentTools.MEMORY_FORGET -> forget(args, taskId, emit)
             AgentTools.LIST_SKILLS -> listSkills()
+            AgentTools.SKILL_WRITE -> writeSkill(args, taskId, emit)
+            AgentTools.SKILL_DELETE -> deleteSkill(args, taskId, emit)
             AgentTools.REMINDER_SET -> reminder(args)
             AgentTools.PHONE_TASK -> if (phoneTasks) phone(args) else error("这里不能操作手机，请用其他工具或告诉用户自己操作")
             else -> external(call, taskId, emit)
@@ -161,6 +169,53 @@ internal class ChatTools(
             }
         }
     }.toString()
+
+    private fun problemText(problems: List<dev.xiaoman.api.SkillProblem>) =
+        problems.joinToString("；") { it.message }
+
+    /** Validate → user confirmation → write → reload. Any failed gate comes back as a tool error. */
+    private suspend fun writeSkill(args: JsonObject, taskId: String, emit: (AgentEvent) -> Unit): String {
+        val store = skillStore ?: return error("当前环境不支持创建技能")
+        val draft = store.draft(required(args, "skill_md"), JsonText.string(args, "flow_yaml"))
+        val skill = draft.skill
+            ?: return error("技能校验未通过：${problemText(draft.problems)}。请按提示修正 skill_md 后重新调用")
+        val confirm = confirmSkill ?: return error("无法获取用户确认，技能未保存")
+        val verb = if (draft.created) "新建" else "更新"
+        if (!confirm("请确认是否${verb}技能「${skill.name}」：${skill.description}")) {
+            return error("用户没有确认，技能未保存")
+        }
+        val result = store.commit(draft)
+        val stored = result.skill ?: return error("技能保存失败：${problemText(result.problems)}")
+        emit(
+            AgentEvent.SkillUpdated(
+                taskId,
+                stored.name,
+                if (result.created) SkillChange.CREATED else SkillChange.UPDATED,
+            ),
+        )
+        return buildJsonObject {
+            put("ok", true)
+            put("name", stored.name)
+            put("created", result.created)
+        }.toString()
+    }
+
+    private suspend fun deleteSkill(args: JsonObject, taskId: String, emit: (AgentEvent) -> Unit): String {
+        val store = skillStore ?: return error("当前环境不支持删除技能")
+        val name = required(args, "name")
+        val existing = skills.get(name) ?: return error("找不到技能：$name")
+        val confirm = confirmSkill ?: return error("无法获取用户确认，技能未删除")
+        if (!confirm("请确认是否删除技能「${existing.name}」：${existing.description}")) {
+            return error("用户没有确认，技能未删除")
+        }
+        if (!store.deleteUserSkill(name)) return error("技能 $name 是内置技能或不存在，无法删除")
+        emit(AgentEvent.SkillUpdated(taskId, name, SkillChange.DELETED))
+        return buildJsonObject {
+            put("ok", true)
+            put("name", name)
+            put("deleted", true)
+        }.toString()
+    }
 
     private fun reminder(args: JsonObject): String {
         val text = required(args, "text")

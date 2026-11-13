@@ -53,10 +53,16 @@ class ConsoleChannels(
         (readLine()?.trim()?.lowercase() in setOf("y", "yes")).also { if (!it) out.println("已拒绝。") }
     }
 
-    override suspend fun ask(taskId: String, question: String, takeover: Boolean): String = mutex.withLock {
+    override suspend fun ask(taskId: String, question: String, takeover: Boolean, options: List<String>): String = mutex.withLock {
         out.println("小满问你：$question")
         if (!interactive) return@withLock NOBODY_HERE
-        out.print(if (takeover) "请在手机上完成这一步，完成后按回车 > " else "你的回答 > ")
+        out.print(
+            when {
+                takeover -> "请在手机上完成这一步，完成后按回车 > "
+                options.isNotEmpty() -> "[${options.joinToString(" / ")}] > "
+                else -> "你的回答 > "
+            },
+        )
         out.flush()
         readLine() ?: NOBODY_HERE
     }

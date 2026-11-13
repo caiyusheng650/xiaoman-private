@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="dev.xiaoman.app.assist.XiaomanVoiceSessionService"
+    android:recognitionService="dev.xiaoman.app.assist.XiaomanRecognitionService"
+    android:supportsAssist="true" />

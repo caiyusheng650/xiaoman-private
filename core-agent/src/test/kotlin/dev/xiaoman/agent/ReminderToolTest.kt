@@ -91,7 +91,10 @@ class ReminderToolTest {
         val system = request.messages[0].text
         assertTrue(Prompts.NOW_HEADER in system)
         assertTrue(ReminderTimes.promptNow(nowMillis) in system)
-        assertEquals(AgentTools.specs.map { it.name }, request.tools.map { it.name })
+        assertEquals(
+            AgentTools.specs.filter { it.name !in AgentTools.SKILL_TOOL_NAMES }.map { it.name },
+            request.tools.map { it.name },
+        )
         assertTrue(AgentTools.REMINDER_SET in request.tools.map { it.name })
     }
 }

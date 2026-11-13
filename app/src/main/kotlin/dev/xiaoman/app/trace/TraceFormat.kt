@@ -31,6 +31,7 @@ object TraceFormat {
         is AgentEvent.StepBlocked -> "StepBlocked"
         is AgentEvent.NeedsUser -> "NeedsUser"
         is AgentEvent.MemoryUpdated -> "MemoryUpdated"
+        is AgentEvent.SkillUpdated -> "SkillUpdated"
         is AgentEvent.ToolCalled -> "ToolCalled"
         is AgentEvent.PhoneTaskFinished -> "PhoneTaskFinished"
         is AgentEvent.Failed -> "Failed"
@@ -81,6 +82,7 @@ object TraceFormat {
             }
             is AgentEvent.NeedsUser -> text = event.question
             is AgentEvent.MemoryUpdated -> text = event.permalink
+            is AgentEvent.SkillUpdated -> text = "${event.change.name.lowercase()}: ${event.skillName}"
             is AgentEvent.ToolCalled -> {
                 text = event.tool + ": " + event.summary
                 ok = event.ok

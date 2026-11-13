@@ -22,6 +22,9 @@ sealed class AgentEvent {
 
     data class MemoryUpdated(override val taskId: String, val permalink: String) : AgentEvent()
 
+    /** A skill was created, updated or deleted through the chat tools; the skills UI should reload. */
+    data class SkillUpdated(override val taskId: String, val skillName: String, val change: SkillChange) : AgentEvent()
+
     /** A [ToolProvider] tool (for example an MCP server) ran; [summary] is short and never contains secrets. */
     data class ToolCalled(override val taskId: String, val tool: String, val ok: Boolean, val summary: String) : AgentEvent()
 
@@ -34,9 +37,13 @@ fun interface AgentListener {
     fun onEvent(event: AgentEvent)
 }
 
-/** Answers [Action.AskUser] questions; the app routes this to the chat input. */
-fun interface UserChannel {
-    suspend fun ask(taskId: String, question: String, takeover: Boolean): String
+/**
+ * Answers [Action.AskUser] questions; the app routes this to the chat input.
+ * [options] are suggested quick replies a rich UI can render as tappable buttons;
+ * the answer still comes back as plain text, so channels may ignore them.
+ */
+interface UserChannel {
+    suspend fun ask(taskId: String, question: String, takeover: Boolean, options: List<String> = emptyList()): String
 }
 
 data class AgentConfig(

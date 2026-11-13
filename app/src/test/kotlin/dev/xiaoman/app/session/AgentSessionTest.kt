@@ -71,6 +71,27 @@ class AgentSessionTest {
         assertFalse(s.busy.value)
     }
 
+    @Test fun `quick reply only answers its own pending question`() = runTest(UnconfinedTestDispatcher()) {
+        val s = session(null)
+        val options = listOf("确认", "取消")
+        val first = backgroundScope.launch {
+            assertEquals("取消", s.ask("t1", "保存技能？", false, options))
+        }
+        val previous = assertNotNull(s.question.value)
+        assertTrue(s.answerQuestion("取消", previous.id))
+        first.join()
+
+        val second = backgroundScope.launch {
+            assertEquals("确认", s.ask("t2", "保存另一个技能？", false, options))
+        }
+        val current = assertNotNull(s.question.value)
+        assertEquals(options, current.options)
+        assertFalse(s.answerQuestion("取消", previous.id))
+        assertTrue(s.answerQuestion("确认", current.id))
+        second.join()
+        assertEquals(listOf("取消", "确认"), s.items.value.filterIsInstance<ChatItem.User>().map { it.text })
+    }
+
     @Test fun `a crashed task is closed with Failed and PhoneTaskFinished`() = runTest(UnconfinedTestDispatcher()) {
         lateinit var s: AgentSession
         val agent = AskingAgent { s }

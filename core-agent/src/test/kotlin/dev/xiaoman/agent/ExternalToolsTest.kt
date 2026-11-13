@@ -46,7 +46,10 @@ class ExternalToolsTest {
         agent.handle("北京天气怎么样", h.events, h.stop)
 
         val first = h.chat.requests[0]
-        assertEquals(AgentTools.specs.map { it.name } + "amap__maps_weather", first.tools.map { it.name })
+        assertEquals(
+            AgentTools.specs.filter { it.name !in AgentTools.SKILL_TOOL_NAMES }.map { it.name } + "amap__maps_weather",
+            first.tools.map { it.name },
+        )
         assertTrue(Prompts.EXTERNAL_TOOLS_HINT in first.messages[0].text)
         assertEquals(listOf("amap__maps_weather" to "{\"city\":\"北京\"}"), provider.calls)
         assertEquals("{\"weather\":\"晴\"}", h.chat.requests[1].messages.last().text)
@@ -60,7 +63,10 @@ class ExternalToolsTest {
         val (h, agent) = harness(FakeProvider(fail = true))
         h.chat.reply("好的")
         agent.handle("你好", h.events, h.stop)
-        assertEquals(AgentTools.specs.map { it.name }, h.chat.requests[0].tools.map { it.name })
+        assertEquals(
+            AgentTools.specs.filter { it.name !in AgentTools.SKILL_TOOL_NAMES }.map { it.name },
+            h.chat.requests[0].tools.map { it.name },
+        )
         assertFalse(Prompts.EXTERNAL_TOOLS_HINT in h.chat.requests[0].messages[0].text)
     }
 

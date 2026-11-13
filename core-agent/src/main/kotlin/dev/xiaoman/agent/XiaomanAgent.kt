@@ -21,6 +21,7 @@ import dev.xiaoman.api.Sentinel
 import dev.xiaoman.api.Skill
 import dev.xiaoman.api.SkillChannel
 import dev.xiaoman.api.SkillRepository
+import dev.xiaoman.api.SkillStore
 import dev.xiaoman.api.StopSignal
 import dev.xiaoman.api.UserChannel
 import kotlinx.coroutines.CancellationException
@@ -41,7 +42,7 @@ class XiaomanAgent(
     private val memory: MemoryStore,
     private val skills: SkillRepository,
     sentinel: Sentinel,
-    users: UserChannel,
+    private val users: UserChannel,
     private val reminders: ReminderScheduler,
     private val config: AgentConfig = AgentConfig(),
     private val persona: String = Prompts.DEFAULT_PERSONA,
@@ -49,6 +50,8 @@ class XiaomanAgent(
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
     /** Extra tools such as MCP servers; their names must not shadow the built-in ones. */
     private val externalTools: ToolProvider? = null,
+    /** Writable skill folder; when null the skill_write / skill_delete tools are not offered. */
+    private val skillStore: SkillStore? = null,
 ) : Agent {
     private val loop = OperatorLoop(operator, device, sentinel, users, config)
     private val flows = FlowRunner(loop, users)
@@ -58,9 +61,13 @@ class XiaomanAgent(
     override suspend fun handle(userMessage: String, listener: AgentListener, stop: StopSignal) {
         val taskId = idFactory()
         val emit: (AgentEvent) -> Unit = listener::onEvent
-        val tools = ChatTools(memory, skills, clock, reminders, externalTools, phoneTasks = config.phoneTasks) { goal, skill ->
-            runPhoneTask(goal, skill, listener, stop)
-        }
+        val tools = ChatTools(
+            memory, skills, clock, reminders, externalTools,
+            phoneTasks = config.phoneTasks,
+            phoneTask = { goal, skill -> runPhoneTask(goal, skill, listener, stop) },
+            skillStore = skillStore,
+            confirmSkill = skillStore?.let { { prompt -> confirmByAsk(taskId, prompt) } },
+        )
         try {
             val builtIn = builtInSpecs()
             val toolSpecs = builtIn + externalSpecs()
@@ -130,8 +137,18 @@ class XiaomanAgent(
         return finish(outcome.success, outcome.summary, task.steps)
     }
 
-    private fun builtInSpecs(): List<ToolSpec> =
-        if (config.phoneTasks) AgentTools.specs else AgentTools.specs.filter { it.name != AgentTools.PHONE_TASK }
+    private fun builtInSpecs(): List<ToolSpec> {
+        var specs = AgentTools.specs
+        if (!config.phoneTasks) specs = specs.filter { it.name != AgentTools.PHONE_TASK }
+        if (skillStore == null) specs = specs.filter { it.name !in AgentTools.SKILL_TOOL_NAMES }
+        return specs
+    }
+
+    /** Skill changes are confirmed through the same chat question channel as external tools. */
+    private suspend fun confirmByAsk(taskId: String, prompt: String): Boolean {
+        val reply = users.ask(taskId, prompt, takeover = false, options = listOf(CONFIRM_OPTION, CANCEL_OPTION))
+        return reply.trim().lowercase() in CONFIRM_WORDS
+    }
 
     /** External tools that do not clash with built-in names; a failing provider simply offers nothing. */
     private suspend fun externalSpecs(): List<ToolSpec> {
@@ -253,6 +270,12 @@ class XiaomanAgent(
         private const val MAX_HOWTO_NOTES = 3
         const val MAX_CHAT_SKILL_CHARS = 2000
         const val MAX_CHAT_SKILLS_CHARS = 8000
+
+        private val CONFIRM_WORDS = setOf("确认", "是", "好", "可以", "y", "yes")
+
+        /** Quick-reply buttons offered for skill confirmations; "确认" is in [CONFIRM_WORDS]. */
+        private const val CONFIRM_OPTION = "确认"
+        private const val CANCEL_OPTION = "取消"
 
         fun howtoPermalink(key: String) = "howto/$key"
     }

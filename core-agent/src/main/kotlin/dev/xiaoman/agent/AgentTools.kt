@@ -15,8 +15,13 @@ object AgentTools {
     const val MEMORY_WRITE = "memory_write"
     const val MEMORY_FORGET = "memory_forget"
     const val LIST_SKILLS = "list_skills"
+    const val SKILL_WRITE = "skill_write"
+    const val SKILL_DELETE = "skill_delete"
     const val REMINDER_SET = "reminder_set"
     const val PHONE_TASK = "phone_task"
+
+    /** Tools only offered when a writable [dev.xiaoman.api.SkillStore] is available. */
+    val SKILL_TOOL_NAMES = setOf(SKILL_WRITE, SKILL_DELETE)
 
     val specs: List<ToolSpec> = listOf(
         ToolSpec(
@@ -56,6 +61,25 @@ object AgentTools {
             schema(listOf("identifier"), "identifier" to str("笔记的 permalink 或标题")),
         ),
         ToolSpec(LIST_SKILLS, "列出所有可用的手机操作技能。", schema(emptyList())),
+        ToolSpec(
+            SKILL_WRITE,
+            "把一个可复用的操作流程保存为技能，写入手机的技能目录（保存前会请用户确认）。" +
+                "skill_md 是完整的 SKILL.md 文本：以 --- 开头的 YAML frontmatter，必填 name（只允许小写字母、数字、连字符）" +
+                "和 description（一行中文，写清做什么、用哪个 App）；可选 apps（包名列表）、channel" +
+                "（gui、deeplink、deeplink-then-gui、chat 等，默认 gui）、confirm_before（需要用户确认的按钮文字）、" +
+                "memory（要引用的记忆 permalink）、deeplinks（名称到 scheme:// 链接的映射）；用另一行 --- 结束 frontmatter，" +
+                "之后是给操作模型的简短中文步骤。校验失败时工具结果会给出具体错误，按错误修正后重新调用，不要把密码或密钥写进技能。",
+            schema(
+                listOf("skill_md"),
+                "skill_md" to str("完整的 SKILL.md 文件内容，包含 frontmatter 和正文"),
+                "flow_yaml" to str("可选，flow.yaml 固定步骤文本"),
+            ),
+        ),
+        ToolSpec(
+            SKILL_DELETE,
+            "删除一个由用户创建的本地技能（内置技能无法删除，删除前会请用户确认）。",
+            schema(listOf("name"), "name" to str("要删除的技能名，即 SKILL.md 里的 name")),
+        ),
         ToolSpec(
             REMINDER_SET,
             "设置一条定时提醒：到点后小满会在手机上弹出通知。",

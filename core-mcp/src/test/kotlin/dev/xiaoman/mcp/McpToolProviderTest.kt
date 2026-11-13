@@ -239,13 +239,15 @@ class McpToolProviderTest {
     @Test fun userChannelAcceptsOnlyExplicitAffirmatives() = runBlocking {
         val request = ToolApprovalRequest("task", "maps", "weather", "天气", "x".repeat(2000), "需要确认")
         listOf("确认", " 是 ", "好", "可以", "Y", " YES ", "no", "确认一下", "").forEach { reply ->
-            val gateway = UserChannelApprovals(UserChannel { task, question, takeover ->
-                assertEquals("task", task)
-                assertFalse(takeover)
-                assertTrue(question.contains("「天气」（maps）"))
-                assertTrue(question.contains("[参数已截断]"))
-                assertTrue(question.length < 1200)
-                reply
+            val gateway = UserChannelApprovals(object : UserChannel {
+                override suspend fun ask(taskId: String, question: String, takeover: Boolean, options: List<String>): String {
+                    assertEquals("task", taskId)
+                    assertFalse(takeover)
+                    assertTrue(question.contains("「天气」（maps）"))
+                    assertTrue(question.contains("[参数已截断]"))
+                    assertTrue(question.length < 1200)
+                    return reply
+                }
             })
             assertEquals(reply.trim().lowercase() in setOf("确认", "是", "好", "可以", "y", "yes"), gateway.approve(request))
         }

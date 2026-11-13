@@ -10,6 +10,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import dev.xiaoman.app.R
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -23,7 +25,11 @@ import kotlinx.coroutines.launch
 
 /** Pinned above navigation, outside the scrolling transcript; no keyboard can cover its controls. */
 @Composable
-internal fun ApprovalCard(pending: PendingApproval, session: AgentSession) {
+internal fun ApprovalCard(
+    pending: PendingApproval,
+    session: AgentSession,
+    onApprove: ((ApprovalScope) -> Unit)? = null,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var responding by remember(pending.id) { mutableStateOf(false) }
@@ -31,30 +37,35 @@ internal fun ApprovalCard(pending: PendingApproval, session: AgentSession) {
     fun approve(approvalScope: ApprovalScope) {
         if (responding) return
         responding = true
+        if (onApprove != null) {
+            onApprove(approvalScope)
+            return
+        }
         scope.launch {
             // Keep the screen-match guard: approval belongs to the observed app, never this card.
             if (context.findActivity()?.moveTaskToBack(true) == true) delay(650)
             session.answerApproval(ApprovalAnswer(true, approvalScope), pending.id)
         }
     }
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth().padding(12.dp).semantics { liveRegion = LiveRegionMode.Assertive }) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("这一步，请你确认", style = MaterialTheme.typography.titleSmall)
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(Dimens.cardShape),
+        modifier = Modifier.pageWidth().padding(Space.md).semantics { liveRegion = LiveRegionMode.Assertive }) {
+        Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Dimens.cardGap)) {
+            Text(stringResource(R.string.approval_title), style = MaterialTheme.typography.titleSmall)
             Text(pending.request.prompt, style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.heightIn(max = 110.dp).verticalScroll(rememberScrollState()))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Dimens.cardGap)) {
                 OutlinedButton(onClick = { responding = true; session.answerApproval(ApprovalAnswer(false), pending.id) },
-                    enabled = !responding, modifier = Modifier.weight(1f)) { Text("暂不允许") }
-                Button(onClick = { approve(ApprovalScope.ONCE) }, enabled = !responding, modifier = Modifier.weight(1f)) { Text("允许一次") }
+                    enabled = !responding, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.approval_deny)) }
+                Button(onClick = { approve(ApprovalScope.ONCE) }, enabled = !responding, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.approval_once)) }
             }
             if (more) {
                 TextButton(onClick = { approve(ApprovalScope.TASK) }, enabled = !responding) {
-                    Text("本次任务的同类操作都允许", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(R.string.approval_task_similar), style = MaterialTheme.typography.labelMedium)
                 }
             } else {
                 TextButton(onClick = { more = true }, enabled = !responding, contentPadding = PaddingValues(0.dp)) {
-                    Text("更多选项", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.approval_more), style = MaterialTheme.typography.labelSmall)
                 }
             }
         }

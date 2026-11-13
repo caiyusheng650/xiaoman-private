@@ -24,8 +24,12 @@ import dev.xiaoman.api.ScreenState
 import dev.xiaoman.api.SearchHit
 import dev.xiaoman.api.Sentinel
 import dev.xiaoman.api.Skill
+import dev.xiaoman.api.SkillDraft
 import dev.xiaoman.api.SkillLoadResult
+import dev.xiaoman.api.SkillProblem
 import dev.xiaoman.api.SkillRepository
+import dev.xiaoman.api.SkillStore
+import dev.xiaoman.api.SkillWriteResult
 import dev.xiaoman.api.StopSignal
 import dev.xiaoman.api.ToolCall
 import dev.xiaoman.api.UiNode
@@ -105,11 +109,44 @@ class InMemoryMemory : MemoryStore {
     override suspend fun list(folder: String?): List<Note> = notes.values.filter { folder == null || it.permalink.startsWith("$folder/") }
 }
 
-class FakeSkills(vararg skills: Skill) : SkillRepository {
+open class FakeSkills(vararg skills: Skill) : SkillRepository {
     private val all = skills.toList()
     override suspend fun reload() = SkillLoadResult(all, emptyList())
     override suspend fun list() = all
     override suspend fun get(name: String) = all.firstOrNull { it.name == name }
+}
+
+/** In-memory [SkillStore]: drafts parse name/description with simple regexes, no YAML engine needed. */
+class FakeSkillStore(initial: List<Skill> = emptyList()) : SkillStore {
+    private val saved = LinkedHashMap(initial.associateBy { it.name })
+    /** When non-empty, every [draft] fails with these problems and nothing can be committed. */
+    var draftProblems: List<SkillProblem> = emptyList()
+    val commits = mutableListOf<SkillDraft>()
+    val deletes = mutableListOf<String>()
+
+    override suspend fun draft(skillMd: String, flowYaml: String?): SkillDraft {
+        if (draftProblems.isNotEmpty()) return SkillDraft(skillMd, flowYaml, null, draftProblems, true)
+        val name = Regex("(?m)^name:\\s*(\\S+)").find(skillMd)?.groupValues?.get(1) ?: "draft"
+        val description = Regex("(?m)^description:\\s*(.+)").find(skillMd)?.groupValues?.get(1)?.trim() ?: name
+        val skill = Skill(name = name, description = description, instructions = "测试说明", source = "test://$name")
+        return SkillDraft(skillMd, flowYaml, skill, emptyList(), created = name !in saved)
+    }
+
+    override suspend fun commit(draft: SkillDraft): SkillWriteResult {
+        val skill = draft.skill ?: return SkillWriteResult(null, draft.problems, draft.created)
+        commits += draft
+        saved[skill.name] = skill
+        return SkillWriteResult(skill, emptyList(), draft.created)
+    }
+
+    override suspend fun deleteUserSkill(name: String): Boolean {
+        deletes += name
+        return saved.remove(name) != null
+    }
+
+    override suspend fun reload() = SkillLoadResult(saved.values.toList(), emptyList())
+    override suspend fun list() = saved.values.toList()
+    override suspend fun get(name: String) = saved[name]
 }
 
 fun skill(name: String, description: String = name, flow: dev.xiaoman.api.Flow? = null, deeplinks: Map<String, String> = emptyMap(), memoryRefs: List<String> = emptyList()) =
@@ -128,7 +165,7 @@ class FakeSentinel(private val policy: (Action) -> Decision = { Decision.Allow()
 class FakeUsers(vararg answers: String) : UserChannel {
     private val queue = ArrayDeque(answers.toList())
     val asked = mutableListOf<Pair<String, Boolean>>()
-    override suspend fun ask(taskId: String, question: String, takeover: Boolean): String {
+    override suspend fun ask(taskId: String, question: String, takeover: Boolean, options: List<String>): String {
         asked += question to takeover
         return queue.removeFirstOrNull() ?: "好"
     }
@@ -167,9 +204,13 @@ class Harness(
     val reminders: FakeReminderScheduler = FakeReminderScheduler(),
     val config: AgentConfig = AgentConfig(),
     val clock: () -> Long = { 1000L },
+    val skillStore: FakeSkillStore? = null,
 ) {
     private var ids = 0
-    val agent = XiaomanAgent(chat, operator, device, memory, skills, sentinel, users, reminders, config, clock = clock, idFactory = { "t${++ids}" })
+    val agent = XiaomanAgent(
+        chat, operator, device, memory, skills, sentinel, users, reminders, config,
+        clock = clock, idFactory = { "t${++ids}" }, skillStore = skillStore,
+    )
     val events = Events()
     val stop = Stop()
 }

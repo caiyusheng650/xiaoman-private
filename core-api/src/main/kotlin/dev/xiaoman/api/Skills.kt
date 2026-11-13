@@ -83,3 +83,38 @@ interface SkillRepository {
 
     suspend fun get(name: String): Skill?
 }
+
+/** What happened to a skill the agent wrote or deleted. */
+enum class SkillChange { CREATED, UPDATED, DELETED }
+
+/**
+ * A model-authored SKILL.md checked against the same rules as the folder loader, without touching
+ * disk. [skill] is null together with non-empty [problems] when the draft is not committable.
+ * [created] is false when a user skill of the same name already exists and the commit would replace it.
+ */
+data class SkillDraft(
+    val skillMd: String,
+    val flowYaml: String?,
+    val skill: Skill?,
+    val problems: List<SkillProblem>,
+    val created: Boolean,
+)
+
+/** Outcome of persisting a [SkillDraft]: [skill] is null with [problems] when the write failed. */
+data class SkillWriteResult(val skill: Skill?, val problems: List<SkillProblem>, val created: Boolean)
+
+/**
+ * A [SkillRepository] that can also persist skills authored in conversation. Implementations write
+ * to one writable user folder and must never modify bundled roots; validation reuses the loader
+ * rules so an invalid draft can never reach the folder.
+ */
+interface SkillStore : SkillRepository {
+    /** Validates SKILL.md content (and optional flow.yaml) without writing anything. */
+    suspend fun draft(skillMd: String, flowYaml: String? = null): SkillDraft
+
+    /** Writes a previously validated draft to the user skill folder and reloads the repository. */
+    suspend fun commit(draft: SkillDraft): SkillWriteResult
+
+    /** Deletes a skill from the user skill folder; false when absent or not user-writable. */
+    suspend fun deleteUserSkill(name: String): Boolean
+}

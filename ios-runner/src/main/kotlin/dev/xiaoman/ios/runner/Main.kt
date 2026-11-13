@@ -192,6 +192,7 @@ class Runner(
             is AgentEvent.StepBlocked -> out.println("      被安全模块拦下：${event.decision.reason}")
             is AgentEvent.NeedsUser -> out.println("  需要你：${event.question}")
             is AgentEvent.MemoryUpdated -> out.println("  已更新记忆：${event.permalink}")
+            is AgentEvent.SkillUpdated -> out.println("  技能变更：${event.change} ${event.skillName}")
             is AgentEvent.ToolCalled -> out.println("  调用工具：${event.summary}")
             is AgentEvent.PhoneTaskFinished ->
                 out.println((if (event.success) "任务完成" else "任务未完成") + "（${event.steps} 步）：${event.summary}")

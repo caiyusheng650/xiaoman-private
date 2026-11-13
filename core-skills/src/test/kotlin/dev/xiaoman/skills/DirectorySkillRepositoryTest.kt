@@ -11,6 +11,7 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -29,7 +30,7 @@ class DirectorySkillRepositoryTest {
         if (flow != null) File(dir, "flow.yaml").writeText(flow)
     }
 
-    private fun TestScope.repo(vararg roots: File) = DirectorySkillRepository(roots.toList(), StandardTestDispatcher(testScheduler))
+    private fun TestScope.repo(vararg roots: File) = DirectorySkillRepository(roots.toList(), io = StandardTestDispatcher(testScheduler))
 
     @Test
     fun loadsExamplesWithoutProblems() = runTest {
@@ -118,5 +119,85 @@ class DirectorySkillRepositoryTest {
         assertNull(repo.get("b"), "no rescan before reload")
         repo.reload()
         assertNotNull(repo.get("b"))
+    }
+
+    private val coffeeSkill = "---\nname: coffee-order\ndescription: 早上点咖啡\nchannel: chat\n---\n# 早上点咖啡\n按步骤来。\n"
+
+    @Test
+    fun draftAndCommitWritesAUserSkillAndReloads() = runTest {
+        val user = File(tmp, "user")
+        val repo = repo(user)
+        val draft = repo.draft(coffeeSkill)
+        assertTrue(draft.problems.isEmpty(), draft.problems.toString())
+        assertTrue(draft.created)
+        val result = repo.commit(draft)
+        assertTrue(result.problems.isEmpty())
+        assertEquals("coffee-order", result.skill?.name)
+        assertTrue(File(user, "coffee-order/SKILL.md").isFile)
+        assertEquals("早上点咖啡", repo.get("coffee-order")?.description)
+    }
+
+    @Test
+    fun invalidDraftNeverTouchesDiskAndCommitAlsoRefuses() = runTest {
+        val user = File(tmp, "user")
+        val repo = repo(user)
+        val draft = repo.draft("---\nname: Bad_Name\ndescription: d\n---\n")
+        assertNull(draft.skill)
+        assertTrue(draft.problems.isNotEmpty())
+        assertEquals(emptyList(), user.listFiles()?.toList().orEmpty())
+        assertNull(repo.commit(draft).skill)
+    }
+
+    @Test
+    fun draftRejectsNamesShadowingBundledSkills() = runTest {
+        val bundled = File(tmp, "bundled")
+        val user = File(tmp, "user")
+        skill(bundled, "taxi-home", description = "内置")
+        val repo = repo(bundled, user)
+        repo.reload()
+        val draft = repo.draft("---\nname: taxi-home\ndescription: 想顶替内置\n---\n正文\n")
+        assertNull(draft.skill)
+        assertTrue(draft.problems.any { "内置技能冲突" in it.message })
+        assertFalse(File(user, "taxi-home").exists())
+    }
+
+    @Test
+    fun commitTwiceUpdatesTheSameUserSkill() = runTest {
+        val user = File(tmp, "user")
+        val repo = repo(user)
+        repo.commit(repo.draft(coffeeSkill))
+        val second = repo.draft("---\nname: coffee-order\ndescription: 第二版\nchannel: chat\n---\n新正文\n")
+        assertFalse(second.created)
+        val result = repo.commit(second)
+        assertFalse(result.created)
+        assertEquals("第二版", repo.get("coffee-order")?.description)
+    }
+
+    @Test
+    fun draftValidatesFlowYamlAndCommitWritesIt() = runTest {
+        val user = File(tmp, "user")
+        val repo = repo(user)
+        val md = "---\nname: launch-settings\ndescription: 打开设置\napps: [com.android.settings]\n---\n正文\n"
+        assertTrue(repo.draft(md, "steps:\n  - fly: away\n").problems.isNotEmpty())
+        val good = repo.draft(md, "steps:\n  - launch: com.android.settings\n")
+        assertTrue(good.problems.isEmpty(), good.problems.toString())
+        repo.commit(good)
+        assertTrue(File(user, "launch-settings/flow.yaml").isFile)
+    }
+
+    @Test
+    fun deleteOnlyRemovesUserSkills() = runTest {
+        val bundled = File(tmp, "bundled")
+        val user = File(tmp, "user")
+        skill(bundled, "taxi-home", description = "内置")
+        skill(user, "coffee-order")
+        val repo = repo(bundled, user)
+        repo.reload()
+        assertFalse(repo.deleteUserSkill("taxi-home"))
+        assertNotNull(repo.get("taxi-home"))
+        assertTrue(repo.deleteUserSkill("coffee-order"))
+        assertNull(repo.get("coffee-order"))
+        assertFalse(File(user, "coffee-order").exists())
+        assertFalse(repo.deleteUserSkill("missing"))
     }
 }

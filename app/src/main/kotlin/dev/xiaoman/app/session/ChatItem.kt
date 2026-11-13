@@ -2,20 +2,33 @@ package dev.xiaoman.app.session
 
 import dev.xiaoman.api.Action
 import dev.xiaoman.api.AgentEvent
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /** One row of the chat list. */
+@Serializable
 sealed class ChatItem {
     abstract val id: Long
 
-    data class User(override val id: Long, val text: String) : ChatItem()
+    @Serializable
+    @SerialName("user")
+    data class User(override val id: Long, val text: String, val sentAt: Long? = null) : ChatItem()
 
-    data class Assistant(override val id: Long, val text: String) : ChatItem()
+    @Serializable
+    @SerialName("assistant")
+    data class Assistant(override val id: Long, val text: String, val sentAt: Long? = null) : ChatItem()
 
     /** Compact progress line: steps, skill chosen, memory updated, task result. */
+    @Serializable
+    @SerialName("progress")
     data class Progress(override val id: Long, val text: String, val ok: Boolean? = null) : ChatItem()
 
+    @Serializable
+    @SerialName("question")
     data class Question(override val id: Long, val text: String, val takeover: Boolean) : ChatItem()
 
+    @Serializable
+    @SerialName("error")
     data class Error(override val id: Long, val text: String) : ChatItem()
 }
 
@@ -53,7 +66,7 @@ object StepText {
 
     /** The chat row for [event], or null when it only updates the status. */
     fun chatItem(event: AgentEvent, id: Long): ChatItem? = when (event) {
-        is AgentEvent.Reply -> ChatItem.Assistant(id, event.text)
+        is AgentEvent.Reply -> ChatItem.Assistant(id, event.text, System.currentTimeMillis())
         is AgentEvent.SkillChosen -> ChatItem.Progress(id, "使用技能 ${event.skillName}")
         is AgentEvent.PhoneTaskStarted -> ChatItem.Progress(id, "开始手机任务：${event.goal}")
         is AgentEvent.StepPlanned -> null
@@ -64,6 +77,15 @@ object StepText {
         is AgentEvent.StepBlocked -> ChatItem.Progress(id, "${event.stepIndex + 1}. ${action(event.action)}：已拦截（${event.decision.reason}）", false)
         is AgentEvent.NeedsUser -> ChatItem.Question(id, event.question, event.takeover)
         is AgentEvent.MemoryUpdated -> ChatItem.Progress(id, "已更新记忆 ${event.permalink}")
+        is AgentEvent.SkillUpdated -> ChatItem.Progress(
+            id,
+            when (event.change) {
+                dev.xiaoman.api.SkillChange.CREATED -> "已保存技能 ${event.skillName}"
+                dev.xiaoman.api.SkillChange.UPDATED -> "已更新技能 ${event.skillName}"
+                dev.xiaoman.api.SkillChange.DELETED -> "已删除技能 ${event.skillName}"
+            },
+            true,
+        )
         is AgentEvent.ToolCalled -> ChatItem.Progress(id, event.summary, event.ok)
         is AgentEvent.PhoneTaskFinished -> ChatItem.Progress(
             id,

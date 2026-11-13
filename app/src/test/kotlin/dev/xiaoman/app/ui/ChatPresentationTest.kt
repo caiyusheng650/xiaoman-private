@@ -39,4 +39,19 @@ class ChatPresentationTest {
     @Test fun unmatchedMarkersAndLiteralMathStayIntact() {
         assertEquals("2 * 3 = 6，**未结束", chatRichText("2 * 3 = 6，**未结束").text)
     }
+
+    @Test fun `message timestamps mark first timed message five minute gaps and midnight`() {
+        val start = java.time.Instant.parse("2026-11-14T15:54:30Z").toEpochMilli()
+        val messages = listOf(
+            ChatItem.User(1, "旧消息"),
+            ChatItem.User(2, "第一条", start),
+            ChatItem.Assistant(3, "紧接着回复", start + 1_000),
+            ChatItem.Progress(4, "处理完成"),
+            ChatItem.User(5, "五分钟后", start + 301_000),
+            ChatItem.Assistant(6, "跨天回复", start + 331_000),
+        )
+        val rows = chatTimeline(messages, java.time.ZoneId.of("Asia/Shanghai"))
+        assertEquals(listOf(2L, 5L, 6L), rows.filterIsInstance<TimelineRow.Message>()
+            .filter { it.timestamp != null }.map { it.id })
+    }
 }

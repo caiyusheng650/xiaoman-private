@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
@@ -31,12 +30,20 @@ data class SessionTexts(
     val notConfigured: String = "还没有配置模型。",
     val busy: String = "已有任务在运行。",
     val stopped: String = "已停止",
+    val interrupted: String = "上次对话中的任务已中断，请重新发起。",
     val approvedOnce: (String) -> String = { "已允许：$it" },
     val approvedTask: (String) -> String = { "本次任务都允许：$it" },
     val denied: (String) -> String = { "已拒绝：$it" },
 )
 
-class PendingQuestion(val id: Long, val taskId: String, val question: String, val takeover: Boolean) {
+class PendingQuestion(
+    val id: Long,
+    val taskId: String,
+    val question: String,
+    val takeover: Boolean,
+    /** Suggested quick replies rendered as tappable chips; empty means free text only. */
+    val options: List<String> = emptyList(),
+) {
     internal val answer = CompletableDeferred<String>()
 }
 
@@ -61,14 +68,33 @@ class AgentSession(
     val stopSignal: MutableStopSignal,
     private val trace: AgentListener,
     private val onTaskEnd: (String) -> Unit = {},
-    private val texts: SessionTexts = SessionTexts(),
+    private val texts: () -> SessionTexts = { SessionTexts() },
     private val ready: suspend () -> Unit = {},
+    private val historyStore: ChatHistoryStore? = null,
+    private val onHistoryCleared: () -> Unit = {},
+    private val onResult: (String) -> Unit = {},
 ) : UserChannel, ApprovalGateway {
 
-    private val ids = AtomicLong()
+    private val historyLock = Any()
+    private var historyActive = false
+    private var finalReply: String? = null
+    private var taskResult: String? = null
+    private val saved = historyStore?.load() ?: ChatHistory()
+    private val ids = AtomicLong(saved.items.maxOfOrNull(ChatItem::id) ?: 0L)
     private val running = AtomicBoolean(false)
 
-    private val _items = MutableStateFlow<List<ChatItem>>(emptyList())
+    private val _items = MutableStateFlow(
+        if (saved.active) {
+            (saved.items + ChatItem.Error(ids.incrementAndGet(), texts().interrupted)).takeLast(MAX_ITEMS)
+        } else {
+            saved.items.takeLast(MAX_ITEMS)
+        },
+    )
+
+    init {
+        if (saved.active) persist()
+    }
+
     val items: StateFlow<List<ChatItem>> = _items.asStateFlow()
 
     private val _busy = MutableStateFlow(false)
@@ -107,7 +133,18 @@ class AgentSession(
         }
         if (event is AgentEvent.PhoneTaskFinished) onTaskEnd(event.taskId)
         StepText.status(event)?.let { _status.value = it }
-        StepText.chatItem(event, ids.incrementAndGet())?.let(::add)
+        StepText.chatItem(event, ids.incrementAndGet())?.let { item ->
+            synchronized(historyLock) {
+                if (historyActive) {
+                    when {
+                        event is AgentEvent.Reply && item is ChatItem.Assistant && item.text.isNotBlank() -> finalReply = item.text
+                        event is AgentEvent.PhoneTaskFinished && item is ChatItem.Progress -> taskResult = item.text
+                        event is AgentEvent.Failed && item is ChatItem.Error -> taskResult = item.text
+                    }
+                }
+                add(item)
+            }
+        }
         _events.tryEmit(event)
     }
 
@@ -123,21 +160,24 @@ class AgentSession(
     fun submit(text: String): Submit {
         val message = text.trim()
         if (message.isEmpty()) return Submit.Empty
-        val pending = _question.value
-        if (pending != null && pending.answer.complete(message)) {
-            add(ChatItem.User(ids.incrementAndGet(), message))
-            return Submit.Answered
-        }
+        if (answerQuestion(message)) return Submit.Answered
         val agent = agent()
         if (agent == null) {
-            add(ChatItem.User(ids.incrementAndGet(), message))
-            add(ChatItem.Error(ids.incrementAndGet(), texts.notConfigured))
+            add(ChatItem.User(ids.incrementAndGet(), message, System.currentTimeMillis()))
+            add(ChatItem.Error(ids.incrementAndGet(), texts().notConfigured))
             return Submit.NotConfigured
         }
-        val started = launch(null) { agent.handle(message, listener, stopSignal) }
+        val started = launch(null, message) { agent.handle(message, listener, stopSignal) }
         if (!started) return Submit.Busy
-        add(ChatItem.User(ids.incrementAndGet(), message))
         return Submit.Started
+    }
+
+    fun answerQuestion(message: String, questionId: Long? = null): Boolean {
+        val pending = _question.value ?: return false
+        if (questionId != null && pending.id != questionId) return false
+        if (!pending.answer.complete(message)) return false
+        add(ChatItem.User(ids.incrementAndGet(), message, System.currentTimeMillis()))
+        return true
     }
 
     /**
@@ -149,14 +189,14 @@ class AgentSession(
         val id = runId?.takeIf(RunIds::isValid) ?: runIds.generate()
         val agent = agent()
         if (agent == null) {
-            fail(id, texts.notConfigured)
+            fail(id, texts().notConfigured)
             return false
         }
         val started = launch(id) {
             runIds.prime(id)
             agent.runPhoneTask(goal, skill, listener, stopSignal)
         }
-        if (!started) fail(id, texts.busy)
+        if (!started) fail(id, texts().busy)
         return started
     }
 
@@ -171,8 +211,8 @@ class AgentSession(
         if (!_busy.value) return
         stopSignal.stop()
         _approval.value?.answer?.complete(ApprovalAnswer(approved = false))
-        _question.value?.answer?.complete(texts.stopped)
-        _status.value = texts.stopped
+        _question.value?.answer?.complete(texts().stopped)
+        _status.value = texts().stopped
     }
 
     fun answerApproval(answer: ApprovalAnswer, approvalId: Long? = null) {
@@ -181,9 +221,10 @@ class AgentSession(
         pending.answer.complete(answer)
     }
 
-    override suspend fun ask(taskId: String, question: String, takeover: Boolean): String {
-        val pending = PendingQuestion(ids.incrementAndGet(), taskId, question, takeover)
-        if (stopSignal.stopped) return texts.stopped
+    override suspend fun ask(taskId: String, question: String, takeover: Boolean, options: List<String>): String {
+        val pending = PendingQuestion(ids.incrementAndGet(), taskId, question, takeover, options)
+        if (stopSignal.stopped) return texts().stopped
+        if (options.isNotEmpty()) add(ChatItem.Question(ids.incrementAndGet(), question, takeover))
         _question.value = pending
         try {
             return pending.answer.await()
@@ -196,14 +237,15 @@ class AgentSession(
         if (stopSignal.stopped) return ApprovalAnswer(approved = false)
         val pending = PendingApproval(ids.incrementAndGet(), request)
         val before = _status.value
+        add(ChatItem.Question(ids.incrementAndGet(), request.prompt, takeover = false))
         _approval.value = pending
         _status.value = "等待确认：${request.prompt}"
         try {
             val answer = pending.answer.await()
             val line = when {
-                !answer.approved -> texts.denied(request.prompt)
-                answer.scope == dev.xiaoman.api.ApprovalScope.TASK -> texts.approvedTask(request.prompt)
-                else -> texts.approvedOnce(request.prompt)
+                !answer.approved -> texts().denied(request.prompt)
+                answer.scope == dev.xiaoman.api.ApprovalScope.TASK -> texts().approvedTask(request.prompt)
+                else -> texts().approvedOnce(request.prompt)
             }
             add(ChatItem.Progress(ids.incrementAndGet(), line, answer.approved))
             return answer
@@ -214,8 +256,14 @@ class AgentSession(
     }
 
     /** Starts [block] unless something is running. [runId] is pre-registered as open (debug runs). */
-    private fun launch(runId: String?, block: suspend () -> Unit): Boolean {
-        if (!running.compareAndSet(false, true)) return false
+    private fun launch(runId: String?, userMessage: String? = null, block: suspend () -> Unit): Boolean {
+        synchronized(historyLock) {
+            if (!running.compareAndSet(false, true)) return false
+            historyActive = true
+            finalReply = null
+            taskResult = null
+            if (userMessage == null) persist() else add(ChatItem.User(ids.incrementAndGet(), userMessage, System.currentTimeMillis()))
+        }
         stopSignal.reset()
         if (runId != null) synchronized(openRuns) { openRuns += runId }
         _status.value = null
@@ -226,30 +274,49 @@ class AgentSession(
                 ready()
                 block()
             } catch (e: CancellationException) {
-                failure = texts.stopped
+                failure = texts().stopped
                 throw e
             } catch (e: Exception) {
                 failure = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
             } finally {
                 withContext(NonCancellable) {
                     val open = synchronized(openRuns) { openRuns.toList().also { openRuns.clear() } }
-                    open.forEach { fail(it, failure ?: texts.stopped) }
+                    open.forEach { fail(it, failure ?: texts().stopped) }
                     if (failure != null && open.isEmpty()) add(ChatItem.Error(ids.incrementAndGet(), failure))
                     _question.value?.answer?.cancel()
                     _approval.value?.answer?.cancel()
                     _question.value = null
                     _approval.value = null
                     _status.value = null
-                    running.set(false)
-                    _busy.value = false
+                    val result = synchronized(historyLock) {
+                        historyActive = false
+                        persist()
+                        running.set(false)
+                        _busy.value = false
+                        failure ?: finalReply ?: taskResult
+                    }
+                    if (!stopSignal.stopped && !result.isNullOrBlank()) onResult(result)
                 }
             }
         }
         return true
     }
 
-    private fun add(item: ChatItem) {
-        _items.update { (it + item).takeLast(MAX_ITEMS) }
+    fun clearHistory(): Boolean = synchronized(historyLock) {
+        if (running.get()) return false
+        if (historyStore?.save(ChatHistory()) == false) return false
+        _items.value = emptyList()
+        onHistoryCleared()
+        true
+    }
+
+    private fun add(item: ChatItem) = synchronized(historyLock) {
+        _items.value = (_items.value + item).takeLast(MAX_ITEMS)
+        persist()
+    }
+
+    private fun persist() {
+        historyStore?.save(ChatHistory(_items.value, historyActive))
     }
 
     companion object {

@@ -6,7 +6,9 @@ import dev.xiaoman.agent.XiaomanAgent
 import dev.xiaoman.api.Agent
 import dev.xiaoman.api.ModelRole
 import dev.xiaoman.app.session.AgentSession
+import dev.xiaoman.app.session.ChatHistoryStore
 import dev.xiaoman.app.session.SessionTexts
+import dev.xiaoman.app.settings.AppearanceSettings
 import dev.xiaoman.app.settings.AppSettings
 import dev.xiaoman.app.settings.SettingsStore
 import dev.xiaoman.app.trace.RecordingDevice
@@ -34,6 +36,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import java.io.File
 import java.io.IOException
 
@@ -59,13 +62,14 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
     val bundledSkillsDir = File(app.filesDir, "bundled-skills")
     val mcpFile = File(externalRoot, "mcp.json")
 
+    val appearance = AppearanceSettings(app)
     val settings: SettingsStore by lazy { SettingsStore.create(app) }
 
     val memory by lazy { FileMemoryStore(memoryDir) }
 
     val skills by lazy { DirectorySkillRepository(listOf(bundledSkillsDir, skillsDir)) }
 
-    val notifier by lazy { Notifier(app) }
+    val notifier by lazy { Notifier(app) { appearance.localizedContext(app) } }
 
     val reminderScheduler by lazy { AlarmReminderScheduler(app) }
 
@@ -103,6 +107,8 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
 
     val runIds = RunIds()
     val uiVisible = MutableStateFlow(false)
+    val assistantPanelVisible = MutableStateFlow(false)
+    internal val assistantMicrophoneGranted = MutableStateFlow<Boolean?>(null)
 
     val traces by lazy {
         TraceWriter(
@@ -127,15 +133,28 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
             stopSignal = MutableStopSignal(),
             trace = traces,
             onTaskEnd = { sentinel.endTask(it) },
-            texts = SessionTexts(
-                notConfigured = app.getString(R.string.session_not_configured),
-                busy = app.getString(R.string.session_busy),
-                stopped = app.getString(R.string.session_stopped),
-                approvedOnce = { app.getString(R.string.approval_resolved_allowed, it) },
-                approvedTask = { app.getString(R.string.approval_resolved_task, it) },
-                denied = { app.getString(R.string.approval_resolved_denied, it) },
-            ),
+            texts = {
+                val localized = appearance.localizedContext(app)
+                SessionTexts(
+                    notConfigured = localized.getString(R.string.session_not_configured),
+                    busy = localized.getString(R.string.session_busy),
+                    stopped = localized.getString(R.string.session_stopped),
+                    interrupted = localized.getString(R.string.session_interrupted),
+                    approvedOnce = { localized.getString(R.string.approval_resolved_allowed, it) },
+                    approvedTask = { localized.getString(R.string.approval_resolved_task, it) },
+                    denied = { localized.getString(R.string.approval_resolved_denied, it) },
+                )
+            },
             ready = { startup.await() },
+            historyStore = ChatHistoryStore(File(app.noBackupFilesDir, "chat-history.json")),
+            onHistoryCleared = ::resetAgent,
+            onResult = { text ->
+                if (!uiVisible.value && !assistantPanelVisible.value) {
+                    scope.launch(Dispatchers.Main.immediate) {
+                        if (!uiVisible.value && !assistantPanelVisible.value) notifier.showResult(text)
+                    }
+                }
+            },
         )
     }
 
@@ -144,6 +163,11 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
         private set
 
     private var cachedAgent: Pair<Pair<AppSettings, McpSelection>, Agent>? = null
+
+    @Synchronized
+    private fun resetAgent() {
+        cachedAgent = null
+    }
 
     /** The agent for the current settings, rebuilt when they change; null until both models are configured. */
     @Synchronized
@@ -164,6 +188,7 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
             config = current.agentConfig(),
             idFactory = runIds::next,
             externalTools = mcpFor(key.second),
+            skillStore = skills,
         )
         cachedAgent = key to agent
         return agent
@@ -171,13 +196,24 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
 
     fun start() {
         startup = scope.async(Dispatchers.IO) { prepareSkills() }
-        notifier.createChannels()
+        scope.launch(Dispatchers.Main.immediate) {
+            appearance.language.collect { notifier.createChannels() }
+        }
+        scope.launch(Dispatchers.Main.immediate) {
+            combine(uiVisible, assistantPanelVisible) { app, panel -> app || panel }
+                .collect { if (it) notifier.dismissResult() }
+        }
         OverlayController(session, accessibilityDevice, uiVisible = uiVisible).start(scope)
         scope.launch(Dispatchers.Main.immediate) {
             session.busy.collect { busy -> if (busy) AgentService.start(app) }
         }
         scope.launch(Dispatchers.Main.immediate) { session.approval.collect(notifier::showApproval) }
-        scope.launch(Dispatchers.Main.immediate) { session.question.collect(notifier::showQuestion) }
+        scope.launch(Dispatchers.Main.immediate) {
+            combine(session.question, uiVisible, assistantPanelVisible) { question, app, panel ->
+                question.takeUnless { app || panel }
+            }
+                .collect(notifier::showQuestion)
+        }
     }
 
     private suspend fun prepareSkills() {

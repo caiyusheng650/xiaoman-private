@@ -25,9 +25,13 @@ class WebChannels(private val timeoutMillis: Long = 180_000) : UserChannel, Tool
             return withTimeoutOrNull(timeoutMillis) { p.result.await() }
         } finally { pending.remove(id) }
     }
-    override suspend fun ask(taskId: String, question: String, takeover: Boolean): String =
-        waitFor(false) { id -> event("question") { put("id", id); put("question", question) } }
-            ?.get("text")?.jsonPrimitive?.contentOrNull ?: "用户没有回答"
+    override suspend fun ask(taskId: String, question: String, takeover: Boolean, options: List<String>): String =
+        waitFor(false) { id ->
+            event("question") {
+                put("id", id); put("question", question)
+                if (options.isNotEmpty()) putJsonArray("options") { options.forEach { add(it) } }
+            }
+        }?.get("text")?.jsonPrimitive?.contentOrNull ?: "用户没有回答"
     override suspend fun approve(request: ToolApprovalRequest): Boolean =
         waitFor(true) { id -> event("approval") {
             put("id", id); put("title", request.title ?: request.tool); put("server", request.server)
