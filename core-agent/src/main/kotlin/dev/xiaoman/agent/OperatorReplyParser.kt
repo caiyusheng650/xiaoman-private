@@ -128,7 +128,10 @@ object OperatorReplyParser {
             }
             "deeplink" -> {
                 val uri = o.str("uri", "url", "link", "deeplink") ?: throw IllegalArgumentException("deeplink 需要 uri")
-                Action.OpenDeeplink(uri, o.str("packageName", "package_name", "package"), target, reason)
+                Action.OpenDeeplink(
+                    uri, o.str("packageName", "package_name", "package"), target, reason,
+                    continueAfterScreenshot = o.bool("continueAfterScreenshot") ?: false,
+                )
             }
             "wait" -> {
                 val millis = o.long("millis", "ms", "durationMs", "duration_ms", "duration")

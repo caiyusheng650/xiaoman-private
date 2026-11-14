@@ -96,7 +96,14 @@ sealed class Action {
     data class LaunchApp(val packageName: String, override val target: String? = null, override val reason: String? = null) : Action()
 
     @Serializable @SerialName("deeplink")
-    data class OpenDeeplink(val uri: String, val packageName: String? = null, override val target: String? = null, override val reason: String? = null) : Action()
+    data class OpenDeeplink(
+        val uri: String,
+        val packageName: String? = null,
+        override val target: String? = null,
+        override val reason: String? = null,
+        /** Continue the current operator run when a screenshot is an intermediate step. */
+        val continueAfterScreenshot: Boolean = false,
+    ) : Action()
 
     @Serializable @SerialName("wait")
     data class Wait(val millis: Long = 1000, override val target: String? = null, override val reason: String? = null) : Action()
@@ -110,7 +117,12 @@ sealed class Action {
 }
 
 @Serializable
-data class ActionResult(val ok: Boolean, val message: String? = null)
+data class ActionResult(
+    val ok: Boolean,
+    val message: String? = null,
+    /** The Android system accepted the screenshot request. Saving takes place asynchronously. */
+    val screenshotRequested: Boolean = false,
+)
 
 @Serializable
 data class AppInfo(val packageName: String, val label: String)

@@ -6,4 +6,18 @@
     <string name="xiaoman_overlay_stop">Stop</string>
     <string name="xiaoman_overlay_stop_description">Stop the current Xiaoman task</string>
     <string name="xiaoman_overlay_open">View Xiaoman task</string>
+    <string name="hands_service_disconnected">无障碍服务未开启</string>
+    <string name="hands_action_unsupported">当前设备或界面不支持：%1$s</string>
+    <string name="hands_action_accepted">系统已接受：%1$s</string>
+    <string name="hands_action_refused">系统未接受：%1$s</string>
+    <string name="hands_app_missing">未找到应用 %1$s</string>
+    <string name="hands_invalid_action_link">无效的动作链接</string>
+    <string name="hands_unexpected_target_app">全局动作不接受目标应用包名</string>
+    <string name="hands_action_quick_settings">展开快捷设置</string>
+    <string name="hands_action_recents">打开最近任务</string>
+    <string name="hands_action_notifications">展开通知栏</string>
+    <string name="hands_action_lock">锁屏</string>
+    <string name="hands_action_screenshot">系统截屏</string>
+    <string name="hands_action_back">返回</string>
+    <string name="hands_action_home">回到桌面</string>
 </resources>

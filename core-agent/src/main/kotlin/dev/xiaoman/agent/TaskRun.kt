@@ -14,6 +14,7 @@ internal class TaskRun(
     val skill: Skill?,
     val listener: AgentListener,
     val stop: StopSignal,
+    val language: AgentLanguage = AgentLanguage.CHINESE,
 ) {
     /** Device actions executed so far; also the step index of the next one. */
     var steps = 0

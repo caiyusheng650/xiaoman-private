@@ -1,6 +1,7 @@
 package dev.xiaoman.app.session
 
 import dev.xiaoman.api.Action
+import dev.xiaoman.api.ActionResult
 import dev.xiaoman.api.Agent
 import dev.xiaoman.api.AgentEvent
 import dev.xiaoman.api.AgentListener
@@ -9,6 +10,8 @@ import dev.xiaoman.api.ApprovalRequest
 import dev.xiaoman.api.ApprovalScope
 import dev.xiaoman.api.StopSignal
 import dev.xiaoman.app.RunIds
+import dev.xiaoman.app.settings.AppLanguage
+import dev.xiaoman.app.settings.AppearanceSettings
 import dev.xiaoman.hands.MutableStopSignal
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,12 +21,18 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentSessionTest {
     private val traced = mutableListOf<AgentEvent>()
@@ -35,6 +44,7 @@ class AgentSessionTest {
         runIds = RunIds(),
         stopSignal = MutableStopSignal(),
         trace = trace,
+        resources = { RuntimeEnvironment.getApplication().resources },
     )
 
     /** Answers like XiaomanAgent: asks once through the session, then finishes. */
@@ -51,6 +61,39 @@ class AgentSessionTest {
             gate.await()
             throw IllegalStateException("boom")
         }
+    }
+
+    @Test fun `saved accessibility error can be rendered in either language`() {
+        val app = RuntimeEnvironment.getApplication()
+        val appearance = AppearanceSettings(app)
+        val english = appearance.localizedContext(app, AppLanguage.ENGLISH).resources
+        val chinese = appearance.localizedContext(app, AppLanguage.CHINESE).resources
+        val legacyError = ChatItem.Error(1, "无障碍服务未开启")
+
+        val resource = assertNotNull(legacyError.messageResource)
+        val englishText = english.getString(resource)
+        assertTrue(englishText.startsWith("Accessibility service is off."))
+        assertEquals(legacyError.text, chinese.getString(resource))
+        assertEquals(resource, ChatItem.Error(2, englishText).messageResource)
+        assertEquals(null, ChatItem.Error(3, "Different device error").messageResource)
+    }
+
+    @Test fun `activity and status follow the selected app language`() {
+        val app = RuntimeEnvironment.getApplication()
+        val appearance = AppearanceSettings(app)
+        val link = Action.OpenDeeplink("xiaoman://screenshot/take?label=private")
+        val step = AgentEvent.StepExecuted("t", 0, link, ActionResult(true))
+
+        val english = StepText(appearance.localizedContext(app, AppLanguage.ENGLISH).resources)
+        assertEquals(
+            "Using skill android-system-actions",
+            (english.chatItem(AgentEvent.SkillChosen("t", "android-system-actions"), 1) as ChatItem.Progress).text,
+        )
+        assertEquals("1. Open link xiaoman://screenshot/take", (english.chatItem(step, 2) as ChatItem.Progress).text)
+        assertEquals("Step 1: Open link xiaoman://screenshot/take", english.status(AgentEvent.StepPlanned("t", 0, link)))
+
+        val chinese = StepText(appearance.localizedContext(app, AppLanguage.CHINESE).resources)
+        assertEquals("1. 打开链接 xiaoman://screenshot/take", (chinese.chatItem(step, 3) as ChatItem.Progress).text)
     }
 
     @Test fun `debug run without models still ends with terminal events`() = runTest(UnconfinedTestDispatcher()) {

@@ -40,6 +40,30 @@ class AppLinksTest {
     }
 
     @Test
+    fun timerValidatesDurationAndKeepsClockUi() {
+        val timer = assertNotNull(AppLinks.intentFor(Uri.parse("xiaoman://timer/set?seconds=300&label=Tea&skipUi=true")))
+        assertEquals(AlarmClock.ACTION_SET_TIMER, timer.action)
+        assertEquals(300, timer.getIntExtra(AlarmClock.EXTRA_LENGTH, 0))
+        assertEquals("Tea", timer.getStringExtra(AlarmClock.EXTRA_MESSAGE))
+        assertFalse(timer.getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, true))
+        assertFailsWith<IllegalArgumentException> { AppLinks.intentFor(Uri.parse("xiaoman://timer/set?seconds=0")) }
+    }
+
+    @Test
+    fun registeredRoutesUseOnlyPublicSystemActions() {
+        assertEquals(
+            android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT,
+            AppLinks.globalActionFor(Uri.parse("xiaoman://screenshot/take"))?.id,
+        )
+        assertEquals(
+            android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY,
+            AppLinks.intentFor(Uri.parse("xiaoman://internet/open"))?.action,
+        )
+        assertNull(AppLinks.globalActionFor(Uri.parse("https://screenshot/take")))
+        assertFailsWith<IllegalArgumentException> { AppLinks.intentFor(Uri.parse("xiaoman://wifi/enable")) }
+    }
+
+    @Test
     fun malformedOrUnknownLinksAreRejected() {
         for (link in listOf("xiaoman://alarm/set?hour=24", "xiaoman://alarm/set?minute=5", "xiaoman://alarm/set?hour=8&minute=60",
             "xiaoman://alarm/delete?hour=8", "xiaoman://call/dial?number=110")) {

@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.xiaoman.app.R
 import dev.xiaoman.app.session.ChatItem
+import dev.xiaoman.app.session.localizedText
 import dev.xiaoman.app.session.PendingQuestion
 
 @Composable
@@ -288,7 +289,7 @@ internal fun ChatMessage(item: ChatItem) {
             }
         }
         is ChatItem.Question -> NoticeCard(stringResource(if (item.takeover) R.string.chat_takeover_card else R.string.chat_question_card), item.text, false)
-        is ChatItem.Error -> NoticeCard(stringResource(R.string.chat_failed_card), item.text, true)
+        is ChatItem.Error -> NoticeCard(stringResource(R.string.chat_failed_card), item.localizedText(), true)
         is ChatItem.Progress -> Unit // handled by ProcessCard
     }
 }

@@ -218,4 +218,40 @@
     <string name="guide_open_failed">无法打开系统设置，请从手机的「设置」应用进入。</string>
     <string name="guide_view_topic">查看配置步骤</string>
     <string name="assist_settings_guide">配置指南</string>
+    <string name="agent_action_tap">点击%1$s</string>
+    <string name="agent_action_long_press">长按%1$s</string>
+    <string name="agent_action_swipe">滑动%1$s</string>
+    <string name="agent_action_type">输入「%1$s」%2$s</string>
+    <string name="agent_action_back">返回</string>
+    <string name="agent_action_home">回到桌面</string>
+    <string name="agent_action_launch">打开 %1$s</string>
+    <string name="agent_action_link">打开链接 %1$s</string>
+    <string name="agent_action_wait">等待 %1$d 毫秒</string>
+    <string name="agent_action_ask">询问：%1$s</string>
+    <string name="agent_action_finish">结束：%1$s</string>
+    <string name="agent_status_start">开始：%1$s</string>
+    <string name="agent_status_step">第 %1$d 步：%2$s</string>
+    <string name="agent_status_blocked">第 %1$d 步已拦截</string>
+    <string name="agent_status_takeover">请接管手机，完成后回到小满回复</string>
+    <string name="agent_status_answer">等待你回答：%1$s</string>
+    <string name="agent_status_done">已完成</string>
+    <string name="agent_status_incomplete">未完成</string>
+    <string name="agent_status_approval">等待确认：%1$s</string>
+    <string name="agent_log_skill">使用技能 %1$s</string>
+    <string name="agent_log_task">开始手机任务：%1$s</string>
+    <string name="agent_log_step">%1$d. %2$s</string>
+    <string name="agent_log_step_failed">%1$d. %2$s（%3$s）</string>
+    <string name="agent_log_step_blocked">%1$d. %2$s：已拦截（%3$s）</string>
+    <string name="agent_log_memory">已更新记忆 %1$s</string>
+    <string name="agent_log_skill_created">已保存技能 %1$s</string>
+    <string name="agent_log_skill_updated">已更新技能 %1$s</string>
+    <string name="agent_log_skill_deleted">已删除技能 %1$s</string>
+    <plurals name="agent_log_task_done">
+        <item quantity="one">任务完成（%1$d 步）：%2$s</item>
+        <item quantity="other">任务完成（%1$d 步）：%2$s</item>
+    </plurals>
+    <plurals name="agent_log_task_failed">
+        <item quantity="one">任务未完成（%1$d 步）：%2$s</item>
+        <item quantity="other">任务未完成（%1$d 步）：%2$s</item>
+    </plurals>
 </resources>

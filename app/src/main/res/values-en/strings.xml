@@ -200,4 +200,40 @@
     <string name="guide_open_failed">Could not open system settings. Open the Settings app on your phone.</string>
     <string name="guide_view_topic">View setup steps</string>
     <string name="assist_settings_guide">Setup steps</string>
+    <string name="agent_action_tap">Tap%1$s</string>
+    <string name="agent_action_long_press">Long-press%1$s</string>
+    <string name="agent_action_swipe">Swipe%1$s</string>
+    <string name="agent_action_type">Enter “%1$s”%2$s</string>
+    <string name="agent_action_back">Go back</string>
+    <string name="agent_action_home">Go to Home</string>
+    <string name="agent_action_launch">Open %1$s</string>
+    <string name="agent_action_link">Open link %1$s</string>
+    <string name="agent_action_wait">Wait %1$d ms</string>
+    <string name="agent_action_ask">Ask: %1$s</string>
+    <string name="agent_action_finish">Finish: %1$s</string>
+    <string name="agent_status_start">Starting: %1$s</string>
+    <string name="agent_status_step">Step %1$d: %2$s</string>
+    <string name="agent_status_blocked">Step %1$d blocked</string>
+    <string name="agent_status_takeover">Take over, then return to Xiaoman to continue</string>
+    <string name="agent_status_answer">Waiting for your reply: %1$s</string>
+    <string name="agent_status_done">Completed</string>
+    <string name="agent_status_incomplete">Incomplete</string>
+    <string name="agent_status_approval">Waiting for approval: %1$s</string>
+    <string name="agent_log_skill">Using skill %1$s</string>
+    <string name="agent_log_task">Started device task: %1$s</string>
+    <string name="agent_log_step">%1$d. %2$s</string>
+    <string name="agent_log_step_failed">%1$d. %2$s (%3$s)</string>
+    <string name="agent_log_step_blocked">%1$d. %2$s: blocked (%3$s)</string>
+    <string name="agent_log_memory">Updated memory %1$s</string>
+    <string name="agent_log_skill_created">Saved skill %1$s</string>
+    <string name="agent_log_skill_updated">Updated skill %1$s</string>
+    <string name="agent_log_skill_deleted">Deleted skill %1$s</string>
+    <plurals name="agent_log_task_done">
+        <item quantity="one">Task completed (%1$d step): %2$s</item>
+        <item quantity="other">Task completed (%1$d steps): %2$s</item>
+    </plurals>
+    <plurals name="agent_log_task_failed">
+        <item quantity="one">Task incomplete (%1$d step): %2$s</item>
+        <item quantity="other">Task incomplete (%1$d steps): %2$s</item>
+    </plurals>
 </resources>

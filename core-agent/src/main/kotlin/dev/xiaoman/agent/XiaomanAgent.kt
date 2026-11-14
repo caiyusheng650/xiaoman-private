@@ -52,8 +52,10 @@ class XiaomanAgent(
     private val externalTools: ToolProvider? = null,
     /** Writable skill folder; when null the skill_write / skill_delete tools are not offered. */
     private val skillStore: SkillStore? = null,
+    private val language: () -> AgentLanguage = { AgentLanguage.CHINESE },
+    operatorNotes: (AgentLanguage) -> String = { config.operatorNotes },
 ) : Agent {
-    private val loop = OperatorLoop(operator, device, sentinel, users, config)
+    private val loop = OperatorLoop(operator, device, sentinel, users, config, operatorNotes)
     private val flows = FlowRunner(loop, users)
     private val historyLock = Mutex()
     private val history = ArrayDeque<ChatMessage>()
@@ -61,17 +63,19 @@ class XiaomanAgent(
     override suspend fun handle(userMessage: String, listener: AgentListener, stop: StopSignal) {
         val taskId = idFactory()
         val emit: (AgentEvent) -> Unit = listener::onEvent
+        val replyLanguage = language()
         val tools = ChatTools(
             memory, skills, clock, reminders, externalTools,
             phoneTasks = config.phoneTasks,
-            phoneTask = { goal, skill -> runPhoneTask(goal, skill, listener, stop) },
+            phoneTask = { goal, skill -> runPhoneTask(goal, skill, listener, stop, replyLanguage) },
             skillStore = skillStore,
-            confirmSkill = skillStore?.let { { prompt -> confirmByAsk(taskId, prompt) } },
+            confirmSkill = skillStore?.let { { prompt -> confirmByAsk(taskId, prompt, replyLanguage) } },
+            language = replyLanguage,
         )
         try {
             val builtIn = builtInSpecs()
             val toolSpecs = builtIn + externalSpecs()
-            val system = ChatMessage.system(systemPrompt(userMessage, hasExternalTools = toolSpecs.size > builtIn.size))
+            val system = ChatMessage.system(systemPrompt(userMessage, replyLanguage, hasExternalTools = toolSpecs.size > builtIn.size))
             val past = historyLock.withLock { history.toList() }
             val turn = mutableListOf(ChatMessage.user(userMessage))
             var lastText: String? = null
@@ -83,7 +87,7 @@ class XiaomanAgent(
                 )
                 val text = response.text.trim()
                 if (response.toolCalls.isEmpty() || !offerTools) {
-                    finalText = text.ifEmpty { if (response.toolCalls.isNotEmpty()) Prompts.TOOL_ROUNDS_EXCEEDED else "" }
+                    finalText = text.ifEmpty { if (response.toolCalls.isNotEmpty()) replyLanguage.text(Prompts.TOOL_ROUNDS_EXCEEDED, "Too many tool calls to complete this turn.") else "" }
                     break
                 }
                 if (text.isNotEmpty()) {
@@ -99,37 +103,55 @@ class XiaomanAgent(
             if (!finalText.isNullOrEmpty()) emit(AgentEvent.Reply(taskId, finalText))
             remember(userMessage, finalText?.takeIf { it.isNotEmpty() } ?: lastText)
         } catch (e: LlmException) {
-            emit(AgentEvent.Failed(taskId, Prompts.llmFailed(e)))
+            emit(AgentEvent.Failed(taskId, Prompts.llmFailed(e, replyLanguage)))
         }
     }
 
-    override suspend fun runPhoneTask(goal: String, skillName: String?, listener: AgentListener, stop: StopSignal): AgentEvent.PhoneTaskFinished {
+    override suspend fun runPhoneTask(goal: String, skillName: String?, listener: AgentListener, stop: StopSignal): AgentEvent.PhoneTaskFinished =
+        runPhoneTask(goal, skillName, listener, stop, language())
+
+    private suspend fun runPhoneTask(
+        goal: String,
+        skillName: String?,
+        listener: AgentListener,
+        stop: StopSignal,
+        language: AgentLanguage,
+    ): AgentEvent.PhoneTaskFinished {
         val taskId = idFactory()
         fun finish(success: Boolean, summary: String, steps: Int) =
             AgentEvent.PhoneTaskFinished(taskId, success, summary, steps).also(listener::onEvent)
 
         val wanted = skillName?.trim()?.takeIf { it.isNotEmpty() }
         val skill = wanted?.let { quietly(null) { skills.get(it) } }
-        if (skill?.channel == SkillChannel.CHAT) return finish(false, "${Prompts.CHAT_SKILL_PHONE_REFUSED}：${skill.name}", 0)
+        if (skill?.channel == SkillChannel.CHAT) {
+            val message = language.text(
+                "${Prompts.CHAT_SKILL_PHONE_REFUSED}：${skill.name}",
+                "This skill runs in chat: ${skill.name}",
+            )
+            return finish(false, message, 0)
+        }
         if (skill != null) listener.onEvent(AgentEvent.SkillChosen(taskId, skill.name))
         listener.onEvent(AgentEvent.PhoneTaskStarted(taskId, goal, skill?.name))
-        if (wanted != null && skill == null) return finish(false, "${Prompts.SKILL_NOT_FOUND}：$wanted", 0)
+        if (wanted != null && skill == null) {
+            return finish(false, language.text("${Prompts.SKILL_NOT_FOUND}：$wanted", "Skill not found: $wanted"), 0)
+        }
 
-        val task = TaskRun(taskId, goal, skill, listener, stop)
+        val task = TaskRun(taskId, goal, skill, listener, stop, language)
         val outcome = try {
             task.references = references(skill)
             task.howto = howto(goal, skill)
             val flow = skill?.flow
-            if (flow != null && flow.steps.isNotEmpty()) flows.run(task, flow) else loop.run(task)
+            if (flow != null && flow.steps.isNotEmpty()) flows.run(task, flow)
+            else loop.tryStandaloneScreenshot(task) ?: loop.run(task)
         } catch (e: CancellationException) {
             throw e
         } catch (e: LlmException) {
-            val message = Prompts.operatorLlmFailed(e)
+            val message = Prompts.operatorLlmFailed(e, language)
             listener.onEvent(AgentEvent.Failed(taskId, message))
             LoopOutcome(false, message)
         } catch (e: Exception) {
             // e.g. the accessibility service is not connected: device.observe() throws.
-            val message = e.message?.takeIf { it.isNotBlank() } ?: Prompts.UNEXPECTED_ERROR
+            val message = e.message?.takeIf { it.isNotBlank() } ?: language.text(Prompts.UNEXPECTED_ERROR, "An error occurred while running the task.")
             listener.onEvent(AgentEvent.Failed(taskId, message))
             LoopOutcome(false, message)
         }
@@ -145,8 +167,9 @@ class XiaomanAgent(
     }
 
     /** Skill changes are confirmed through the same chat question channel as external tools. */
-    private suspend fun confirmByAsk(taskId: String, prompt: String): Boolean {
-        val reply = users.ask(taskId, prompt, takeover = false, options = listOf(CONFIRM_OPTION, CANCEL_OPTION))
+    private suspend fun confirmByAsk(taskId: String, prompt: String, language: AgentLanguage): Boolean {
+        val options = listOf(language.text("确认", "Confirm"), language.text("取消", "Cancel"))
+        val reply = users.ask(taskId, prompt, takeover = false, options = options)
         return reply.trim().lowercase() in CONFIRM_WORDS
     }
 
@@ -163,20 +186,20 @@ class XiaomanAgent(
         }
     }
 
-    private suspend fun systemPrompt(userMessage: String, hasExternalTools: Boolean = false): String = buildString {
-        append(persona.trim())
-        if (hasExternalTools) append("\n").append(Prompts.EXTERNAL_TOOLS_HINT)
-        append("\n\n").append(Prompts.nowSection(ReminderTimes.promptNow(clock())))
+    private suspend fun systemPrompt(userMessage: String, language: AgentLanguage, hasExternalTools: Boolean = false): String = buildString {
+        append(Prompts.persona(persona, language).trim()).append("\n\n").append(language.chatInstruction())
+        if (hasExternalTools) append("\n").append(language.text(Prompts.EXTERNAL_TOOLS_HINT, "Tools containing __ come from external services. Prefer them when they can complete a task. Use their actual results and wait for required confirmation."))
+        append("\n\n").append(Prompts.nowSection(ReminderTimes.promptNow(clock()), language))
         val list = quietly(emptyList()) { skills.list() }
         if (config.phoneTasks) {
-            append("\n\n").append(Prompts.SKILLS_HEADER).append('\n')
+            append("\n\n").append(language.text(Prompts.SKILLS_HEADER, "## Device skills (the phone_task skill parameter)")).append('\n')
             val phoneSkills = list.filter { it.channel != SkillChannel.CHAT }
-            if (phoneSkills.isEmpty()) append(Prompts.NO_SKILLS)
+            if (phoneSkills.isEmpty()) append(language.text(Prompts.NO_SKILLS, "No skills available. Use the task goal directly."))
             else phoneSkills.forEach { append("- ").append(it.name).append(": ").append(it.description).append('\n') }
         }
         val chatSkills = list.filter { it.channel == SkillChannel.CHAT }
         if (chatSkills.isNotEmpty()) {
-            append("\n\n").append(Prompts.CHAT_SKILLS_HEADER).append('\n').append(Prompts.CHAT_SKILLS_HINT)
+            append("\n\n").append(language.text(Prompts.CHAT_SKILLS_HEADER, "## Chat workflows")).append('\n').append(language.text(Prompts.CHAT_SKILLS_HINT, "When a chat workflow matches, follow its instructions in chat. Use memory, reminders or external tools as needed."))
             var remaining = MAX_CHAT_SKILLS_CHARS
             for (skill in chatSkills) {
                 append("\n\n### ").append(skill.name).append("：").append(skill.description)
@@ -196,7 +219,7 @@ class XiaomanAgent(
         }
         val hits = quietly(emptyList()) { memory.search(userMessage, MEMORY_HITS) }
         if (hits.isNotEmpty()) {
-            append("\n\n").append(Prompts.MEMORY_HEADER).append('\n')
+            append("\n\n").append(language.text(Prompts.MEMORY_HEADER, "## Potentially relevant memories")).append('\n')
             hits.forEach { append("- ").append(it.title).append(" (").append(it.permalink).append("): ").append(it.snippet.replace('\n', ' ')).append('\n') }
         }
     }.trimEnd()
@@ -271,11 +294,7 @@ class XiaomanAgent(
         const val MAX_CHAT_SKILL_CHARS = 2000
         const val MAX_CHAT_SKILLS_CHARS = 8000
 
-        private val CONFIRM_WORDS = setOf("确认", "是", "好", "可以", "y", "yes")
-
-        /** Quick-reply buttons offered for skill confirmations; "确认" is in [CONFIRM_WORDS]. */
-        private const val CONFIRM_OPTION = "确认"
-        private const val CANCEL_OPTION = "取消"
+        private val CONFIRM_WORDS = setOf("确认", "是", "好", "可以", "confirm", "y", "yes")
 
         fun howtoPermalink(key: String) = "howto/$key"
     }

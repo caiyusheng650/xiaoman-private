@@ -1,5 +1,6 @@
 package dev.xiaoman.app.session
 
+import android.content.res.Resources
 import dev.xiaoman.api.Agent
 import dev.xiaoman.api.AgentEvent
 import dev.xiaoman.api.AgentListener
@@ -67,6 +68,7 @@ class AgentSession(
     private val runIds: RunIds,
     val stopSignal: MutableStopSignal,
     private val trace: AgentListener,
+    private val resources: () -> Resources,
     private val onTaskEnd: (String) -> Unit = {},
     private val texts: () -> SessionTexts = { SessionTexts() },
     private val ready: suspend () -> Unit = {},
@@ -132,8 +134,9 @@ class AgentSession(
             }
         }
         if (event is AgentEvent.PhoneTaskFinished) onTaskEnd(event.taskId)
-        StepText.status(event)?.let { _status.value = it }
-        StepText.chatItem(event, ids.incrementAndGet())?.let { item ->
+        val stepText = StepText(resources())
+        stepText.status(event)?.let { _status.value = it }
+        stepText.chatItem(event, ids.incrementAndGet())?.let { item ->
             synchronized(historyLock) {
                 if (historyActive) {
                     when {
@@ -239,7 +242,7 @@ class AgentSession(
         val before = _status.value
         add(ChatItem.Question(ids.incrementAndGet(), request.prompt, takeover = false))
         _approval.value = pending
-        _status.value = "等待确认：${request.prompt}"
+        _status.value = StepText(resources()).approval(request.prompt)
         try {
             val answer = pending.answer.await()
             val line = when {

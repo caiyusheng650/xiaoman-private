@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.res.Resources
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Path
@@ -34,7 +35,7 @@ import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 
 /** Thrown by [AccessibilityDevice.observe] while the accessibility service is not enabled. */
-class ServiceNotConnectedException : IllegalStateException(AccessibilityDevice.NOT_CONNECTED)
+class ServiceNotConnectedException(message: String = AccessibilityDevice.NOT_CONNECTED) : IllegalStateException(message)
 
 /**
  * [Device] backed by [XiaomanAccessibilityService].
@@ -51,6 +52,7 @@ class AccessibilityDevice(
     private val maxNodes: Int = NodeCompactor.DEFAULT_MAX_NODES,
     private val settleDelayMs: Long = 600,
     var overlay: StatusOverlay? = null,
+    private val resources: () -> Resources = { context.resources },
 ) : Device {
 
     private val appContext: Context = context.applicationContext ?: context
@@ -64,7 +66,7 @@ class AccessibilityDevice(
     // ---------------------------------------------------------------- observe
 
     override suspend fun observe(): ScreenState = mutex.withLock {
-        val service = serviceProvider() ?: throw ServiceNotConnectedException()
+        val service = serviceProvider() ?: throw ServiceNotConnectedException(resources().getString(R.string.hands_service_disconnected))
         // Keep screenshots and node enumeration on the same unobstructed screen. Restoring the
         // pill between them can put its Stop button into the model's node list.
         overlay?.hiddenWhile { observeUnobstructed(service) } ?: observeUnobstructed(service)
@@ -215,7 +217,7 @@ class AccessibilityDevice(
 
     override suspend fun perform(action: Action): ActionResult {
         if (action is Action.AskUser || action is Action.Finish) return ActionResult(false, "not a device action")
-        val service = serviceProvider() ?: return ActionResult(false, NOT_CONNECTED)
+        val service = serviceProvider() ?: return ActionResult(false, resources().getString(R.string.hands_service_disconnected))
         val result = try {
             mutex.withLock { execute(service, action) }
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -239,8 +241,8 @@ class AccessibilityDevice(
             gestureResult(service, path, action.durationMs.coerceIn(50, 5000), "swipe")
         }
         is Action.TypeText -> typeText(service, action)
-        is Action.Back -> global(service, AccessibilityService.GLOBAL_ACTION_BACK, "back")
-        is Action.Home -> global(service, AccessibilityService.GLOBAL_ACTION_HOME, "home")
+        is Action.Back -> global(service, AccessibilityService.GLOBAL_ACTION_BACK, resources().getString(R.string.hands_action_back))
+        is Action.Home -> global(service, AccessibilityService.GLOBAL_ACTION_HOME, resources().getString(R.string.hands_action_home))
         is Action.LaunchApp -> launch(service, action.packageName)
         is Action.OpenDeeplink -> deeplink(service, action)
         is Action.Wait -> {
@@ -334,21 +336,47 @@ class AccessibilityDevice(
         }
     }
 
-    private fun global(service: AccessibilityService, id: Int, what: String): ActionResult =
-        if (service.performGlobalAction(id)) ActionResult(true, what) else ActionResult(false, "$what refused")
+    private suspend fun global(service: XiaomanAccessibilityService, id: Int, what: String): ActionResult {
+        suspend fun perform(): ActionResult = withContext(Dispatchers.Main.immediate) {
+            if (id !in service.refreshGlobalActions()) {
+                ActionResult(false, resources().getString(R.string.hands_action_unsupported, what))
+            } else if (service.performGlobalAction(id)) {
+                ActionResult(true, resources().getString(R.string.hands_action_accepted, what))
+            } else {
+                ActionResult(false, resources().getString(R.string.hands_action_refused, what))
+            }
+        }
+        // Keep our progress overlay out of the asynchronous system capture.
+        val status = overlay
+        return if (id == AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT && status != null) {
+            status.hiddenWhile {
+                val result = perform()
+                if (result.ok) delay(750)
+                result
+            }
+        } else perform()
+    }
 
     private fun launch(service: XiaomanAccessibilityService, packageName: String): ActionResult {
         val intent = appContext.packageManager.getLaunchIntentForPackage(packageName)
-            ?: return ActionResult(false, "未找到应用 $packageName")
+            ?: return ActionResult(false, resources().getString(R.string.hands_app_missing, packageName))
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return start(service, intent, "launched $packageName")
     }
 
-    private fun deeplink(service: XiaomanAccessibilityService, action: Action.OpenDeeplink): ActionResult {
+    private suspend fun deeplink(service: XiaomanAccessibilityService, action: Action.OpenDeeplink): ActionResult {
         val uri = runCatching { Uri.parse(action.uri) }.getOrNull()
-        if (uri?.scheme.isNullOrEmpty()) return ActionResult(false, "invalid uri ${action.uri}")
+        if (uri == null || uri.scheme.isNullOrEmpty()) return ActionResult(false, resources().getString(R.string.hands_invalid_action_link))
+        AppLinks.globalActionFor(uri)?.let { route ->
+            if (action.packageName != null) return ActionResult(false, resources().getString(R.string.hands_unexpected_target_app))
+            val result = global(service, route.id, resources().getString(route.labelRes))
+            if (result.ok && route.id == AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT) {
+                return result.copy(screenshotRequested = true)
+            }
+            return result
+        }
         val intent = try {
-            AppLinks.intentFor(uri!!) ?: Intent(Intent.ACTION_VIEW, uri)
+            AppLinks.intentFor(uri) ?: Intent(Intent.ACTION_VIEW, uri)
         } catch (e: IllegalArgumentException) {
             return ActionResult(false, e.message)
         }

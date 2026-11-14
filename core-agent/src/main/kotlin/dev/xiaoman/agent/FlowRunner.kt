@@ -18,7 +18,7 @@ internal class FlowRunner(
     suspend fun run(task: TaskRun, flow: Flow): LoopOutcome {
         var summary: String? = null
         for (step in flow.steps) {
-            if (task.stop.stopped) return LoopOutcome(false, Prompts.STOPPED)
+            if (task.stop.stopped) return LoopOutcome(false, task.language.text(Prompts.STOPPED, "The task was stopped."))
             val outcome = when (step) {
                 is FlowStep.Launch -> act(task, Action.LaunchApp(step.packageName, target = "打开 ${step.packageName}"))
                 is FlowStep.Deeplink -> {
@@ -40,7 +40,7 @@ internal class FlowRunner(
             if (!outcome.success) return outcome
             if (step is FlowStep.Ai) summary = outcome.summary
         }
-        return LoopOutcome(true, summary ?: Prompts.FLOW_DONE)
+        return LoopOutcome(true, summary ?: task.language.text(Prompts.FLOW_DONE, "Workflow completed."))
     }
 
     private suspend fun act(task: TaskRun, action: Action): LoopOutcome {
@@ -54,7 +54,7 @@ internal class FlowRunner(
     private suspend fun confirm(task: TaskRun, question: String): LoopOutcome {
         task.emit(AgentEvent.NeedsUser(task.taskId, question, takeover = false))
         val answer = users.ask(task.taskId, question, false)
-        return if (isYes(answer)) LoopOutcome(true, answer) else LoopOutcome(false, Prompts.CONFIRM_DECLINED)
+        return if (isYes(answer)) LoopOutcome(true, answer) else LoopOutcome(false, task.language.text(Prompts.CONFIRM_DECLINED, "The task was canceled because it was not confirmed."))
     }
 
     /**
@@ -67,14 +67,15 @@ internal class FlowRunner(
         val missing = names.filter { it !in task.values }
         if (missing.isNotEmpty()) {
             val request = ChatRequest(
-                listOf(ChatMessage.system(Prompts.VALUES_SYSTEM), ChatMessage.user(Prompts.valuesRequest(task.goal, missing, task.references))),
+                listOf(ChatMessage.system(task.language.text(Prompts.VALUES_SYSTEM, "Extract named parameters. Return only JSON: {\"values\": {\"parameter\": \"value\"}}. Use an empty string for unknown values.")),
+                    ChatMessage.user(Prompts.valuesRequest(task.goal, missing, task.references, task.language))),
                 jsonMode = true,
             )
             val values = JsonText.firstObject(loop.completeWithRetry(request).text)?.let { it["values"] as? JsonObject ?: it }
             for (name in missing) {
                 val v = values?.let { JsonText.string(it, name) }
                     ?: run {
-                        val q = Prompts.askValue(name)
+                        val q = task.language.text(Prompts.askValue(name), "What should I use for “$name”?")
                         task.emit(AgentEvent.NeedsUser(task.taskId, q, takeover = false))
                         users.ask(task.taskId, q, false).trim()
                     }

@@ -1,6 +1,7 @@
 package dev.xiaoman.agent
 
 import dev.xiaoman.api.Action
+import dev.xiaoman.api.ActionResult
 import dev.xiaoman.api.AgentConfig
 import dev.xiaoman.api.AgentEvent
 import dev.xiaoman.api.ChatResponse
@@ -144,6 +145,84 @@ class PhoneTaskTest {
         assertTrue(h.events.of<AgentEvent.NeedsUser>().single().takeover)
         assertEquals(1, h.operator.requests.size)
         assertTrue("好了" in h.operator.requests[0].messages.last().text)
+    }
+
+    @Test
+    fun englishTurnLocalizesBothPromptsAndProtectedScreenQuestion() = runTest {
+        var language = AgentLanguage.ENGLISH
+        val h = Harness(
+            device = FakeDevice(screen("com.bank", secure = true), settings),
+            users = FakeUsers("Done"),
+            language = { language },
+        )
+        h.chat.tools(ToolCall("c1", AgentTools.PHONE_TASK, """{"goal": "Open Settings"}"""))
+            .reply("Settings is open.").reply("设置已打开。")
+        h.operator.reply(op("""{"type":"finish","success":true,"summary":"Settings is open."}"""))
+
+        h.agent.handle("Open Settings", h.events, h.stop)
+
+        val chatPrompt = h.chat.requests.first().messages.first().text
+        val operatorPrompt = h.operator.requests.single().messages.first().text
+        assertTrue(chatPrompt.startsWith("You are Xiaoman"))
+        assertTrue("Reply in English" in chatPrompt)
+        assertTrue("Use minimal deliberation for routine steps." in operatorPrompt)
+        assertTrue("question and summary fields in English" in operatorPrompt)
+        val takeover = h.events.of<AgentEvent.NeedsUser>().single()
+        assertTrue(takeover.question.startsWith("Android protects this screen."))
+        assertEquals(listOf(takeover.question to true), h.users.asked)
+
+        language = AgentLanguage.CHINESE
+        h.agent.handle("再说一遍", h.events, h.stop)
+        assertTrue("用简体中文回复" in h.chat.requests.last().messages.first().text)
+    }
+
+    @Test
+    fun standaloneScreenshotUsesSystemBeforeAskingTheOperatorModel() = runTest {
+        val uri = "xiaoman://screenshot/take"
+        val h = Harness(
+            device = FakeDevice(settings),
+            config = AgentConfig(systemScreenshotUri = uri),
+            language = { AgentLanguage.ENGLISH },
+        )
+        h.device.result = ActionResult(ok = true, screenshotRequested = true)
+
+        val finished = h.agent.runPhoneTask("Take a system screenshot of the current screen", null, h.events, h.stop)
+
+        assertEquals(Action.OpenDeeplink(uri), h.device.performed.single())
+        assertEquals("Requested a system screenshot.", finished.summary)
+        assertTrue(h.operator.requests.isEmpty())
+        assertTrue(h.events.of<AgentEvent.NeedsUser>().isEmpty())
+    }
+
+    @Test
+    fun acceptedScreenshotFinishesBeforeTheModelCanAskForTakeover() = runTest {
+        val h = Harness(device = FakeDevice(settings), language = { AgentLanguage.ENGLISH })
+        h.device.result = ActionResult(ok = true, screenshotRequested = true)
+        h.operator.reply(op("""{"type":"deeplink","uri":"xiaoman://screenshot/take"}"""))
+            .reply(op("""{"type":"ask_user","question":"Enable accessibility","takeover":true}"""))
+
+        val finished = h.agent.runPhoneTask("Take a screenshot", null, h.events, h.stop)
+
+        assertTrue(finished.success)
+        assertEquals("Requested a system screenshot.", finished.summary)
+        assertEquals(1, h.operator.requests.size)
+        assertEquals(1, h.events.of<AgentEvent.StepExecuted>().size)
+        assertTrue(h.events.of<AgentEvent.NeedsUser>().isEmpty())
+    }
+
+    @Test
+    fun screenshotCanBeAnIntermediateActionAndRejectionCanFallBack() = runTest {
+        for (accepted in listOf(true, false)) {
+            val h = Harness(device = FakeDevice(settings))
+            h.device.result = ActionResult(ok = accepted, screenshotRequested = accepted)
+            h.operator.reply(op("""{"type":"deeplink","uri":"xiaoman://screenshot/take","continueAfterScreenshot":$accepted}"""))
+                .reply(op("""{"type":"finish","success":true,"summary":"后续步骤处理完成"}"""))
+
+            val finished = h.agent.runPhoneTask("截屏并继续", null, h.events, h.stop)
+
+            assertEquals("后续步骤处理完成", finished.summary)
+            assertEquals(2, h.operator.requests.size)
+        }
     }
 
     @Test

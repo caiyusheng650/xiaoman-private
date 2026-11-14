@@ -60,6 +60,8 @@ data class AgentConfig(
     val operatorNotes: String = "",
     /** Offer `phone_task` to the chat model. Off where there is no phone to operate, e.g. the web version. */
     val phoneTasks: Boolean = true,
+    /** Platform route for a standalone system screenshot, when available. */
+    val systemScreenshotUri: String? = null,
 )
 
 /** Cooperative cancellation from the overlay's Stop button. */

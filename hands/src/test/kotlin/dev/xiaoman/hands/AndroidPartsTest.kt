@@ -69,11 +69,12 @@ class AndroidPartsTest {
 
     @Test fun deviceWithoutServiceFailsGracefully() = runTest {
         val device = AccessibilityDevice({ null }, app, settleDelayMs = 0)
-        assertEquals(AccessibilityDevice.NOT_CONNECTED, device.perform(Action.Tap(point = Point(1, 1))).message)
+        assertEquals(app.getString(R.string.hands_service_disconnected), device.perform(Action.Tap(point = Point(1, 1))).message)
         assertFalse(device.perform(Action.Back()).ok)
         assertEquals("not a device action", device.perform(Action.Finish(true, "done")).message)
         assertEquals("not a device action", device.perform(Action.AskUser("?")).message)
-        assertFailsWith<ServiceNotConnectedException> { device.observe() }
+        val error = assertFailsWith<ServiceNotConnectedException> { device.observe() }
+        assertEquals(app.getString(R.string.hands_service_disconnected), error.message)
     }
 
     @Test fun installedAppsListsLauncherActivities() = runTest {

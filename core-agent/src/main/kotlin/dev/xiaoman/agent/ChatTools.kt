@@ -39,6 +39,7 @@ internal class ChatTools(
     private val skillStore: SkillStore? = null,
     /** Asks the user to confirm a skill change; null answer means the change is refused. */
     private val confirmSkill: (suspend (prompt: String) -> Boolean)? = null,
+    private val language: AgentLanguage = AgentLanguage.CHINESE,
 ) {
     suspend fun execute(call: ToolCall, taskId: String, emit: (AgentEvent) -> Unit): String = try {
         val args = parseArgs(call.argumentsJson)
@@ -181,7 +182,12 @@ internal class ChatTools(
             ?: return error("技能校验未通过：${problemText(draft.problems)}。请按提示修正 skill_md 后重新调用")
         val confirm = confirmSkill ?: return error("无法获取用户确认，技能未保存")
         val verb = if (draft.created) "新建" else "更新"
-        if (!confirm("请确认是否${verb}技能「${skill.name}」：${skill.description}")) {
+        val englishVerb = if (draft.created) "Create" else "Update"
+        val prompt = language.text(
+            "请确认是否${verb}技能「${skill.name}」：${skill.description}",
+            "$englishVerb the skill “${skill.name}”? ${skill.description}",
+        )
+        if (!confirm(prompt)) {
             return error("用户没有确认，技能未保存")
         }
         val result = store.commit(draft)
@@ -205,7 +211,11 @@ internal class ChatTools(
         val name = required(args, "name")
         val existing = skills.get(name) ?: return error("找不到技能：$name")
         val confirm = confirmSkill ?: return error("无法获取用户确认，技能未删除")
-        if (!confirm("请确认是否删除技能「${existing.name}」：${existing.description}")) {
+        val prompt = language.text(
+            "请确认是否删除技能「${existing.name}」：${existing.description}",
+            "Delete the skill “${existing.name}”? ${existing.description}",
+        )
+        if (!confirm(prompt)) {
             return error("用户没有确认，技能未删除")
         }
         if (!store.deleteUserSkill(name)) return error("技能 $name 是内置技能或不存在，无法删除")

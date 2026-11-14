@@ -2,6 +2,7 @@ package dev.xiaoman.app
 
 import android.content.Context
 import android.util.Log
+import dev.xiaoman.agent.AgentLanguage
 import dev.xiaoman.agent.XiaomanAgent
 import dev.xiaoman.api.Agent
 import dev.xiaoman.api.ModelRole
@@ -14,6 +15,7 @@ import dev.xiaoman.app.settings.SettingsStore
 import dev.xiaoman.app.trace.RecordingDevice
 import dev.xiaoman.app.trace.TraceWriter
 import dev.xiaoman.hands.AccessibilityDevice
+import dev.xiaoman.hands.AppLinks
 import dev.xiaoman.hands.MutableStopSignal
 import dev.xiaoman.hands.XiaomanAccessibilityService
 import dev.xiaoman.llm.LlmClientFactory
@@ -118,7 +120,13 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
         )
     }
 
-    val accessibilityDevice by lazy { AccessibilityDevice({ XiaomanAccessibilityService.instance.value }, app) }
+    val accessibilityDevice by lazy {
+        AccessibilityDevice(
+            { XiaomanAccessibilityService.instance.value },
+            app,
+            resources = { appearance.localizedContext(app).resources },
+        )
+    }
 
     private val device by lazy { RecordingDevice(accessibilityDevice, traces::saveScreenshot) }
 
@@ -131,6 +139,7 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
             runIds = runIds,
             stopSignal = MutableStopSignal(),
             trace = traces,
+            resources = { appearance.localizedContext(app).resources },
             onTaskEnd = { sentinel.endTask(it) },
             texts = {
                 val localized = appearance.localizedContext(app)
@@ -184,10 +193,15 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
             sentinel = sentinel,
             users = session,
             reminders = reminderScheduler,
-            config = current.agentConfig(),
+            config = current.agentConfig().copy(systemScreenshotUri = AppLinks.SYSTEM_SCREENSHOT_URI),
+            operatorNotes = { AppLinks.operatorNotes(english = it == AgentLanguage.ENGLISH) },
             idFactory = runIds::next,
             externalTools = mcpFor(key.second),
             skillStore = skills,
+            language = {
+                val locale = appearance.localizedContext(app).resources.configuration.locales[0]
+                if (locale.language == "en") AgentLanguage.ENGLISH else AgentLanguage.CHINESE
+            },
         )
         cachedAgent = key to agent
         return agent

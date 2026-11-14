@@ -50,7 +50,10 @@ private val chatTimeFormat = DateTimeFormatter.ofPattern("HH:mm")
 private val chatDateTimeFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
 @Composable
-fun ChatScreen(graph: AppGraph, onOpenSettings: () -> Unit) {
+fun ChatScreen(
+    graph: AppGraph,
+    onOpenSettings: () -> Unit,
+) {
     val session = graph.session
     val items by session.items.collectAsStateWithLifecycle()
     val busy by session.busy.collectAsStateWithLifecycle()
@@ -242,31 +245,33 @@ internal fun ChatInput(
         }
     }
     Surface(color = containerColor, tonalElevation = 0.dp) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = Dimens.pageHorizontal, vertical = 10.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            OutlinedTextField(
-                value = text, onValueChange = onChange, modifier = Modifier.weight(1f).focusRequester(requester),
-                placeholder = { Text(stringResource(if (answering) R.string.chat_answer_hint else R.string.chat_input_hint), style = MaterialTheme.typography.bodyMedium) },
-                shape = MaterialTheme.shapes.extraLarge, textStyle = MaterialTheme.typography.bodyMedium,
-                minLines = 1, maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    focusedContainerColor = fieldColor,
-                    unfocusedContainerColor = fieldColor,
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { send() }),
-            )
-            Spacer(Modifier.width(8.dp))
-            FilledIconButton(
-                onClick = { if (busy && !answering) session.stop() else send() },
-                enabled = (busy && !answering) || canSend,
-                modifier = Modifier.padding(bottom = 4.dp).size(48.dp),
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(
+                Modifier.pageWidth().padding(horizontal = Dimens.pageHorizontal, vertical = 10.dp),
+                verticalAlignment = Alignment.Bottom,
             ) {
-                Icon(if (busy && !answering) Icons.Default.Stop else Icons.Default.ArrowUpward,
-                    contentDescription = stringResource(if (busy && !answering) R.string.chat_stop else R.string.chat_send))
+                OutlinedTextField(
+                    value = text, onValueChange = onChange, modifier = Modifier.weight(1f).focusRequester(requester),
+                    placeholder = { Text(stringResource(if (answering) R.string.chat_answer_hint else R.string.chat_input_hint), style = MaterialTheme.typography.bodyMedium) },
+                    shape = MaterialTheme.shapes.extraLarge, textStyle = MaterialTheme.typography.bodyMedium,
+                    minLines = 1, maxLines = 4,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedContainerColor = fieldColor,
+                        unfocusedContainerColor = fieldColor,
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { send() }),
+                )
+                Spacer(Modifier.width(8.dp))
+                FilledIconButton(
+                    onClick = { if (busy && !answering) session.stop() else send() },
+                    enabled = (busy && !answering) || canSend,
+                    modifier = Modifier.padding(bottom = 4.dp).size(48.dp),
+                ) {
+                    Icon(if (busy && !answering) Icons.Default.Stop else Icons.Default.ArrowUpward,
+                        contentDescription = stringResource(if (busy && !answering) R.string.chat_stop else R.string.chat_send))
+                }
             }
         }
     }

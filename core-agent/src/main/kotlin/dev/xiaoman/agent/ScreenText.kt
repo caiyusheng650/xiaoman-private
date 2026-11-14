@@ -13,13 +13,14 @@ object ScreenText {
             before.widthPx == after.widthPx && before.heightPx == after.heightPx &&
             before.nodes.isNotEmpty() && before.nodes == after.nodes
 
-    fun section(screen: ScreenState, maxNodes: Int): String {
+    fun section(screen: ScreenState, maxNodes: Int, language: AgentLanguage = AgentLanguage.CHINESE): String {
         val shown = screen.nodes.take(maxNodes)
         return Prompts.screenSection(
             screen.packageName,
             screen.activityName,
             shown.joinToString("\n") { nodeLine(it) },
             screen.nodes.size - shown.size,
+            language,
         )
     }
 

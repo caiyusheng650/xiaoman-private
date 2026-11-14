@@ -19,6 +19,18 @@ data class ForegroundApp(val packageName: String, val activityName: String?)
  */
 class XiaomanAccessibilityService : AccessibilityService() {
 
+    private var globalActions: Set<Int> = emptySet()
+
+    internal fun refreshGlobalActions(): Set<Int> {
+        globalActions = systemActions.map { it.id }.toSet()
+        return globalActions
+    }
+
+    override fun onSystemActionsChanged() {
+        super.onSystemActionsChanged()
+        refreshGlobalActions()
+    }
+
     private val _foreground = MutableStateFlow<ForegroundApp?>(null)
 
     /** Last foreground package/activity seen in a TYPE_WINDOW_STATE_CHANGED event. */
@@ -29,6 +41,7 @@ class XiaomanAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        refreshGlobalActions()
         _instance.value = this
     }
 

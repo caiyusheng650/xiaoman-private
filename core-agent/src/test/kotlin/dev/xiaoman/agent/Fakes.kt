@@ -59,6 +59,7 @@ class FakeDevice(vararg screens: ScreenState) : Device {
     var observeError: Exception? = null
     val performed = mutableListOf<Action>()
     var onPerform: (Action) -> Unit = {}
+    var result = ActionResult(true)
     var observations = 0
 
     override suspend fun observe(): ScreenState {
@@ -70,7 +71,7 @@ class FakeDevice(vararg screens: ScreenState) : Device {
     override suspend fun perform(action: Action): ActionResult {
         performed += action
         onPerform(action)
-        return ActionResult(true)
+        return result
     }
 
     override suspend fun installedApps() = listOf(AppInfo("com.android.settings", "设置"))
@@ -205,11 +206,12 @@ class Harness(
     val config: AgentConfig = AgentConfig(),
     val clock: () -> Long = { 1000L },
     val skillStore: FakeSkillStore? = null,
+    language: () -> AgentLanguage = { AgentLanguage.CHINESE },
 ) {
     private var ids = 0
     val agent = XiaomanAgent(
         chat, operator, device, memory, skills, sentinel, users, reminders, config,
-        clock = clock, idFactory = { "t${++ids}" }, skillStore = skillStore,
+        clock = clock, idFactory = { "t${++ids}" }, skillStore = skillStore, language = language,
     )
     val events = Events()
     val stop = Stop()

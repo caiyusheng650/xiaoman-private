@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hands_service_disconnected">Accessibility service is off. Enable it in Android Settings to let Xiaoman control the device.</string>
+    <string name="hands_action_unsupported">Unavailable on this device or screen: %1$s</string>
+    <string name="hands_action_accepted">Android accepted the action: %1$s</string>
+    <string name="hands_action_refused">Android declined the action: %1$s</string>
+    <string name="hands_app_missing">App not found: %1$s</string>
+    <string name="hands_invalid_action_link">Invalid action link</string>
+    <string name="hands_unexpected_target_app">System actions cannot target a specific app</string>
+    <string name="hands_action_quick_settings">Open Quick Settings</string>
+    <string name="hands_action_recents">Open Recents</string>
+    <string name="hands_action_notifications">Open notifications</string>
+    <string name="hands_action_lock">Lock the screen</string>
+    <string name="hands_action_screenshot">Take a system screenshot</string>
+    <string name="hands_action_back">Go back</string>
+    <string name="hands_action_home">Go to Home</string>
+</resources>

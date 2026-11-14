@@ -38,6 +38,7 @@ import dev.xiaoman.api.ApprovalScope
 import dev.xiaoman.app.R
 import dev.xiaoman.app.session.AgentSession
 import dev.xiaoman.app.session.ChatItem
+import dev.xiaoman.app.session.localizedText
 import dev.xiaoman.app.ui.ApprovalCard
 import dev.xiaoman.app.ui.Dimens
 import dev.xiaoman.app.ui.QuestionCard
@@ -186,7 +187,7 @@ private fun List<ChatItem>.latestReply(): ChatItem? =
 private fun ReplyCard(item: ChatItem, expanded: Boolean, onToggle: () -> Unit, onOpenChat: () -> Unit) {
     val text = when (item) {
         is ChatItem.Assistant -> item.text
-        is ChatItem.Error -> item.text
+        is ChatItem.Error -> item.localizedText()
         else -> return
     }
     Surface(
