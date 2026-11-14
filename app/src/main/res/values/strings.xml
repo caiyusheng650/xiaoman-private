@@ -72,7 +72,7 @@
     <!-- Settings -->
     <string name="settings_title">设置</string>
     <string name="settings_chat_model">聊天模型</string>
-    <string name="settings_operator_model">操作模型（需支持图片）</string>
+    <string name="settings_operator_model">操作模型</string>
     <string name="settings_base_url">服务商地址</string>
     <string name="settings_model">模型</string>
     <string name="settings_api_key">密钥（API Key）</string>

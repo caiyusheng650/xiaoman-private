@@ -107,12 +107,10 @@ fun SettingsScreen(graph: AppGraph) {
             SettingsCard(
                 title = stringResource(R.string.settings_operator_model),
                 description = stringResource(R.string.settings_operator_description),
-                action = {
-                    TextButton(onClick = {
-                        form = form.copy(operator = form.operator.copy(baseUrl = form.chat.baseUrl, apiKey = form.chat.apiKey))
-                    }) { Text(stringResource(R.string.settings_copy_chat)) }
-                },
             ) {
+                OutlinedButton(onClick = {
+                    form = form.copy(operator = form.operator.copy(baseUrl = form.chat.baseUrl, apiKey = form.chat.apiKey))
+                }) { Text(stringResource(R.string.settings_copy_chat)) }
                 ModelFields(form.operator) { form = form.copy(operator = it) }
             }
 
@@ -204,23 +202,19 @@ private fun AssistantSettingsCard(onGuide: () -> Unit) {
 private fun SettingsCard(
     title: String,
     description: String? = null,
-    action: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     StandardCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                description?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
+        Column(Modifier.fillMaxWidth()) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            description?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
             }
-            action?.invoke()
         }
         Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
             content()
