@@ -20,9 +20,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuite
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldLayout
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
@@ -34,7 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,7 +63,7 @@ private enum class Capability(@StringRes val label: Int) {
 /**
  * One adaptive UI for phones and tablets: the Material navigation suite picks the bottom bar on
  * compact widths and a side rail on wide windows, so no page needs a second layout.
- * While the keyboard is open the suite is hidden entirely to give chat the full height.
+ * The bottom bar is gradually covered by the keyboard, while a side rail stays in place.
  */
 @Composable
 fun XiaomanRoot(graph: AppGraph, chatRequest: Int = 0) {
@@ -76,32 +79,40 @@ fun XiaomanRoot(graph: AppGraph, chatRequest: Int = 0) {
     LaunchedEffect(question?.id) {
         if (question != null) tab = Tab.CHAT
     }
-    val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    val layoutType = if (keyboardOpen) {
-        NavigationSuiteType.None
-    } else {
-        NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(currentWindowAdaptiveInfo())
-    }
-    NavigationSuiteScaffold(
-        layoutType = layoutType,
-        navigationSuiteItems = {
-            Tab.entries.forEach { t ->
-                item(
-                    selected = tab == t,
-                    onClick = { tab = t },
-                    icon = { Icon(t.icon, contentDescription = null) },
-                    label = { Text(stringResource(t.label), style = MaterialTheme.typography.labelSmall) },
-                )
-            }
-        },
-    ) {
-        // The navigation suite only handles its own chrome, so the status bar inset is ours.
-        Box(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-            when (tab) {
-                Tab.CHAT -> ChatScreen(graph, onOpenSettings = { tab = Tab.SETTINGS })
-                Tab.CAPABILITIES -> CapabilitiesScreen(graph)
-                Tab.MEMORY -> MemoryScreen(graph)
-                Tab.SETTINGS -> SettingsScreen(graph)
+    val layoutType = NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(currentWindowAdaptiveInfo())
+    val ime = WindowInsets.ime
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        NavigationSuiteScaffoldLayout(
+            layoutType = layoutType,
+            navigationSuite = {
+                val modifier = if (layoutType == NavigationSuiteType.NavigationBar) {
+                    Modifier.clipToBounds().layout { measurable, constraints ->
+                        // Content already reserves the IME inset. Only reserve the part of
+                        // the bottom bar that the keyboard does not cover, on the same frame.
+                        val bar = measurable.measure(constraints)
+                        val visibleHeight = (bar.height - ime.getBottom(this)).coerceAtLeast(0)
+                        layout(bar.width, visibleHeight) { bar.placeRelative(0, 0) }
+                    }
+                } else Modifier
+                NavigationSuite(modifier = modifier, layoutType = layoutType) {
+                    Tab.entries.forEach { t ->
+                        item(
+                            selected = tab == t,
+                            onClick = { tab = t },
+                            icon = { Icon(t.icon, contentDescription = null) },
+                            label = { Text(stringResource(t.label), style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+            },
+        ) {
+            Box(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+                when (tab) {
+                    Tab.CHAT -> ChatScreen(graph, onOpenSettings = { tab = Tab.SETTINGS })
+                    Tab.CAPABILITIES -> CapabilitiesScreen(graph)
+                    Tab.MEMORY -> MemoryScreen(graph)
+                    Tab.SETTINGS -> SettingsScreen(graph)
+                }
             }
         }
     }

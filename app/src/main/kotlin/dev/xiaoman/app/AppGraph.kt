@@ -198,11 +198,11 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
         scope.launch(Dispatchers.Main.immediate) {
             appearance.language.collect { notifier.createChannels() }
         }
+        val conversationVisible = combine(uiVisible, assistantPanelVisible) { app, panel -> app || panel }
         scope.launch(Dispatchers.Main.immediate) {
-            combine(uiVisible, assistantPanelVisible) { app, panel -> app || panel }
-                .collect { if (it) notifier.dismissResult() }
+            conversationVisible.collect { if (it) notifier.dismissResult() }
         }
-        OverlayController(session, accessibilityDevice, uiVisible = uiVisible).start(scope)
+        OverlayController(session, accessibilityDevice, conversationVisible, appearance).start(scope)
         scope.launch(Dispatchers.Main.immediate) {
             session.busy.collect { busy -> if (busy) AgentService.start(app) }
         }

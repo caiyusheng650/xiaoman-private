@@ -1,18 +1,24 @@
 package dev.xiaoman.hands
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -106,8 +112,9 @@ class StatusOverlay(private val context: Context) {
 
     private fun buildView(): LinearLayout {
         val pad = dp(10)
+        val ink = 0xFF173B2D.toInt()
         val label = TextView(context).apply {
-            setTextColor(0xFFFFFFFF.toInt())
+            setTextColor(ink)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
@@ -115,28 +122,48 @@ class StatusOverlay(private val context: Context) {
             text = pendingText
             minHeight = dp(48)
             gravity = Gravity.CENTER_VERTICAL
-            contentDescription = "查看小满的任务"
             setOnClickListener { onOpen() }
             // Read status changes to TalkBack users.
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
+        ViewCompat.replaceAccessibilityAction(
+            label, AccessibilityActionCompat.ACTION_CLICK, context.getString(R.string.xiaoman_overlay_open),
+        ) { _, _ -> label.performClick() }
         val stop = Button(context).apply {
-            setText(R.string.xiaoman_overlay_stop)
-            contentDescription = context.getString(R.string.xiaoman_overlay_stop_description)
+            val mask = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(android.graphics.Color.WHITE)
+            }
+            background = RippleDrawable(ColorStateList.valueOf(0x24173B2D), null, mask)
+            stateListAnimator = null
+            setPadding(dp(12), 0, dp(12), 0)
+            minimumWidth = dp(48)
+            minWidth = dp(48)
             minimumHeight = dp(48)
             minHeight = dp(48)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            isAllCaps = false
+            setTextColor(ink)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setText(R.string.xiaoman_overlay_stop)
+            contentDescription = context.getString(R.string.xiaoman_overlay_stop_description)
             setOnClickListener { onStop() }
         }
         textView = label
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(pad * 2, pad / 2, pad / 2, pad / 2)
+            setPadding(dp(14), 0, dp(3), 0)
+            elevation = dp(4).toFloat()
             background = GradientDrawable().apply {
-                cornerRadius = dp(24).toFloat()
-                setColor(0xF01E4635.toInt())
+                cornerRadius = dp(16).toFloat()
+                setColor(0xFFF3F7F2.toInt())
+                setStroke(dp(1), 0xFFDCE5DC.toInt())
             }
+            addView(ProgressBar(context, null, android.R.attr.progressBarStyleSmall).apply {
+                indeterminateTintList = ColorStateList.valueOf(0xFF1E6B52.toInt())
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginEnd = pad })
             addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = pad })
             addView(stop, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
@@ -152,7 +179,11 @@ class StatusOverlay(private val context: Context) {
         PixelFormat.TRANSLUCENT,
     ).apply {
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        y = dp(36)
+        setFitInsetsTypes(0)
+        layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        val top = windowManager.currentWindowMetrics.windowInsets
+            .getInsetsIgnoringVisibility(WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()).top
+        y = top + dp(8)
         title = "Xiaoman status"
     }
 

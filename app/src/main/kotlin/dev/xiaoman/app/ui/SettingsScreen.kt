@@ -1,12 +1,10 @@
 package dev.xiaoman.app.ui
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.provider.Settings
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,21 +17,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,6 +67,17 @@ fun SettingsScreen(graph: AppGraph) {
     val clipboard = LocalClipboardManager.current
     val parsed = form.toSettings()
     val feedback = rememberPageFeedbackState()
+    val scroll = rememberScrollState()
+    var guideOpen by rememberSaveable { mutableStateOf(false) }
+    var guideTopic by rememberSaveable { mutableStateOf<SetupTopic?>(null) }
+    fun openGuide(topic: SetupTopic? = null) {
+        guideTopic = topic
+        guideOpen = true
+    }
+    if (guideOpen) {
+        SetupGuideScreen(guideTopic, onBack = { guideOpen = false })
+        return
+    }
 
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         // Fixed page header, same component as every other tab — the old in-scroll titleLarge
@@ -80,18 +85,22 @@ fun SettingsScreen(graph: AppGraph) {
         ScreenHeader(title = stringResource(R.string.settings_title))
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(
-                Modifier.align(Alignment.TopCenter).pageWidth().verticalScroll(rememberScrollState())
+                Modifier.align(Alignment.TopCenter).pageWidth().verticalScroll(scroll)
                     .padding(horizontal = Dimens.pageHorizontal)
                     .padding(bottom = Space.lg),
                 verticalArrangement = Arrangement.spacedBy(Dimens.cardGap),
             ) {
+            SetupGuideEntry { openGuide() }
             AppearanceCard(graph)
-            AssistantGuideCard()
+            AssistantSettingsCard(onGuide = { openGuide(SetupTopic.ASSISTANT) })
 
             SettingsCard(
                 title = stringResource(R.string.settings_chat_model),
                 description = stringResource(R.string.settings_chat_description),
             ) {
+                TextButton(onClick = { openGuide(SetupTopic.MODELS) }) {
+                    Text(stringResource(R.string.guide_view_topic))
+                }
                 ModelFields(form.chat) { form = form.copy(chat = it) }
             }
 
@@ -108,6 +117,9 @@ fun SettingsScreen(graph: AppGraph) {
             }
 
             SettingsCard(title = stringResource(R.string.settings_agent)) {
+                TextButton(onClick = { openGuide(SetupTopic.AUTOMATION) }) {
+                    Text(stringResource(R.string.guide_view_topic))
+                }
                 OutlinedTextField(
                     value = form.maxSteps,
                     onValueChange = { form = form.copy(maxSteps = it) },
@@ -166,6 +178,24 @@ fun SettingsScreen(graph: AppGraph) {
                 },
                 modifier = Modifier.weight(1f),
             ) { Text(stringResource(R.string.settings_save)) }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AssistantSettingsCard(onGuide: () -> Unit) {
+    SettingsCard(
+        title = stringResource(R.string.assist_settings_title),
+        description = stringResource(R.string.assist_settings_description),
+    ) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().padding(top = Space.sm),
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+            verticalArrangement = Arrangement.spacedBy(Space.xs),
+        ) {
+            AssistantSettingsButton(emphasized = true)
+            TextButton(onClick = onGuide) { Text(stringResource(R.string.assist_settings_guide)) }
         }
     }
 }
@@ -362,43 +392,5 @@ private fun <T> PreferenceMenu(label: String, selected: T, choices: Map<T, Strin
                 })
             }
         }
-    }
-}
-
-@Composable
-private fun AssistantGuideCard() {
-    val context = LocalContext.current
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    SettingsCard(
-        title = stringResource(R.string.assist_settings_title),
-        description = stringResource(R.string.assist_settings_description),
-    ) {
-        OutlinedButton(onClick = {
-            try {
-                context.startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS))
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(context, R.string.assist_guide_default_body, Toast.LENGTH_LONG).show()
-            }
-        }) { Text(stringResource(R.string.assist_settings_open)) }
-        TextButton(onClick = { expanded = !expanded }) {
-            Text(stringResource(if (expanded) R.string.assist_guide_hide else R.string.assist_guide_show))
-        }
-        if (expanded) {
-            GuideStep(R.string.assist_guide_default_title, R.string.assist_guide_default_body)
-            GuideStep(R.string.assist_guide_launch_title, R.string.assist_guide_launch_body)
-            GuideStep(R.string.assist_guide_type_title, R.string.assist_guide_type_body)
-        }
-    }
-}
-
-@Composable
-private fun GuideStep(@androidx.annotation.StringRes title: Int, @androidx.annotation.StringRes body: Int) {
-    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-        Text(stringResource(title), style = MaterialTheme.typography.titleSmall)
-        Text(
-            stringResource(body),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
