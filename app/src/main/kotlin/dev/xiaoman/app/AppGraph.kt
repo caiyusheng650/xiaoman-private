@@ -6,6 +6,7 @@ import dev.xiaoman.agent.AgentLanguage
 import dev.xiaoman.agent.XiaomanAgent
 import dev.xiaoman.api.Agent
 import dev.xiaoman.api.ModelRole
+import dev.xiaoman.app.lounge.Lounge
 import dev.xiaoman.app.session.AgentSession
 import dev.xiaoman.app.session.ChatHistoryStore
 import dev.xiaoman.app.session.SessionTexts
@@ -65,6 +66,9 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
     val mcpFile = File(externalRoot, "mcp.json")
 
     val appearance = AppearanceSettings(app)
+    internal val lounge by lazy {
+        Lounge(app, scope, { settings }, appearance, llm)
+    }
     val settings: SettingsStore by lazy { SettingsStore.create(app) }
 
     val memory by lazy { FileMemoryStore(memoryDir) }

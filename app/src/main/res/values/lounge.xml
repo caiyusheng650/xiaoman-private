@@ -1,0 +1,31 @@
+<resources>
+    <string name="lounge_title">小满客厅</string>
+    <string name="lounge_unread">小满客厅 · 有新消息</string>
+    <string name="lounge_settings_description">围观 AI 角色聊天，偶尔递个话题。话题和近期客厅对话会发送给已配置的聊天模型。</string>
+    <string name="lounge_auto">自动聊天</string>
+    <string name="lounge_initial_xiaoman">满</string>
+    <string name="lounge_initial_ali">理</string>
+    <string name="lounge_initial_wenwen">文</string>
+    <string name="lounge_ali">阿理</string>
+    <string name="lounge_wenwen">文文</string>
+    <string name="lounge_pause">暂停</string>
+    <string name="lounge_resume">恢复</string>
+    <string name="lounge_paused">已暂停</string>
+    <string name="lounge_busy">正在聊…</string>
+    <string name="lounge_resting">休息中</string>
+    <string name="lounge_clear">清空记录</string>
+    <string name="lounge_clear_message">清空客厅的聊天记录和话题摘要。今天已用的次数会保留。</string>
+    <string name="lounge_empty">客厅还没有消息。你可以递个话题，看看他们会怎么接。</string>
+    <string name="lounge_guided">你递来了话题 · %1$s</string>
+    <string name="lounge_guided_target">你给%1$s递了话题 · %2$s</string>
+    <string name="lounge_configure">配置聊天模型</string>
+    <string name="lounge_guide">递个话题 · 今日剩余 %1$d 次</string>
+    <string name="lounge_pick_topic">递个话题</string>
+    <string name="lounge_everyone">大家</string>
+    <string name="lounge_topic_hint">想让他们聊什么？</string>
+    <string name="lounge_failed">这轮没有生成成功。草稿已保留，没有扣除次数。</string>
+    <string name="nav_lounge">客厅</string>
+    <string name="lounge_enable">开启客厅</string>
+    <string name="lounge_disable">关闭客厅</string>
+    <string name="lounge_options">客厅选项</string>
+</resources>

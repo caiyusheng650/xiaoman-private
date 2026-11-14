@@ -1,0 +1,31 @@
+<resources>
+    <string name="lounge_title">Xiaoman Lounge</string>
+    <string name="lounge_unread">Lounge · New messages</string>
+    <string name="lounge_settings_description">Watch AI characters chat and suggest a topic. Topics and recent lounge messages are sent to your configured chat model.</string>
+    <string name="lounge_auto">Automatic conversations</string>
+    <string name="lounge_initial_xiaoman">X</string>
+    <string name="lounge_initial_ali">A</string>
+    <string name="lounge_initial_wenwen">W</string>
+    <string name="lounge_ali">Ali</string>
+    <string name="lounge_wenwen">Wenwen</string>
+    <string name="lounge_pause">Pause</string>
+    <string name="lounge_resume">Resume</string>
+    <string name="lounge_paused">Paused</string>
+    <string name="lounge_busy">Chatting…</string>
+    <string name="lounge_resting">Quiet for now</string>
+    <string name="lounge_clear">Clear history</string>
+    <string name="lounge_clear_message">Clear lounge messages and the topic summary. Today’s usage is kept.</string>
+    <string name="lounge_empty">The lounge is quiet. Suggest a topic to see what the characters make of it.</string>
+    <string name="lounge_guided">You suggested · %1$s</string>
+    <string name="lounge_guided_target">You suggested to %1$s · %2$s</string>
+    <string name="lounge_configure">Configure chat model</string>
+    <string name="lounge_guide">Suggest a topic · %1$d left today</string>
+    <string name="lounge_pick_topic">Suggest a topic</string>
+    <string name="lounge_everyone">All</string>
+    <string name="lounge_topic_hint">What should they talk about?</string>
+    <string name="lounge_failed">This conversation didn’t come through. Your draft and quota are intact.</string>
+    <string name="nav_lounge">Lounge</string>
+    <string name="lounge_enable">Enable lounge</string>
+    <string name="lounge_disable">Disable lounge</string>
+    <string name="lounge_options">Lounge options</string>
+</resources>

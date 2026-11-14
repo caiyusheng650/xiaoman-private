@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val graph = (application as XiaomanApp).graph
+        graph.lounge.reconcileSchedule()
         chatRequest.intValue = savedInstanceState?.getInt("chatRequest")
             ?: if (intent.action == Notifier.ACTION_OPEN_CHAT) 1 else 0
         setContent {
