@@ -14,7 +14,7 @@ sealed class ChatItem {
 
     @Serializable
     @SerialName("user")
-    data class User(override val id: Long, val text: String, val sentAt: Long? = null) : ChatItem()
+    data class User(override val id: Long, val text: String, val sentAt: Long? = null, val imagePath: String? = null) : ChatItem()
 
     @Serializable
     @SerialName("assistant")

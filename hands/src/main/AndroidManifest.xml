@@ -11,6 +11,12 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <intent><action android:name="android.settings.panel.action.INTERNET_CONNECTIVITY" /></intent>
+        <intent><action android:name="android.settings.panel.action.VOLUME" /></intent>
+        <intent><action android:name="android.settings.DISPLAY_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.BLUETOOTH_SETTINGS" /></intent>
+        <intent><action android:name="android.intent.action.SET_ALARM" /></intent>
+        <intent><action android:name="android.intent.action.SET_TIMER" /></intent>
     </queries>
 
     <application>

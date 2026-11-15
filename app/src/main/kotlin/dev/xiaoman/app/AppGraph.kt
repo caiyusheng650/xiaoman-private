@@ -151,10 +151,13 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
                     approvedOnce = { localized.getString(R.string.approval_resolved_allowed, it) },
                     approvedTask = { localized.getString(R.string.approval_resolved_task, it) },
                     denied = { localized.getString(R.string.approval_resolved_denied, it) },
+                    imageDefaultPrompt = localized.getString(R.string.chat_image_default_prompt),
+                    imageReadFailed = localized.getString(R.string.chat_image_read_failed),
                 )
             },
             ready = { startup.await() },
             historyStore = ChatHistoryStore(File(app.noBackupFilesDir, "chat-history.json")),
+            chatImagesDir = File(app.noBackupFilesDir, "chat-images"),
             onHistoryCleared = ::resetAgent,
             onResult = { text ->
                 if (!uiVisible.value && !assistantPanelVisible.value) {
@@ -194,7 +197,7 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
             users = session,
             reminders = reminderScheduler,
             config = current.agentConfig().copy(systemScreenshotUri = AppLinks.SYSTEM_SCREENSHOT_URI),
-            operatorNotes = { AppLinks.operatorNotes(english = it == AgentLanguage.ENGLISH) },
+            operatorNotes = { accessibilityDevice.operatorNotes(english = it == AgentLanguage.ENGLISH) },
             idFactory = runIds::next,
             externalTools = mcpFor(key.second),
             skillStore = skills,

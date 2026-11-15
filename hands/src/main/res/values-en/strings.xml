@@ -14,4 +14,9 @@
     <string name="hands_action_screenshot">Take a system screenshot</string>
     <string name="hands_action_back">Go back</string>
     <string name="hands_action_home">Go to Home</string>
+    <string name="hands_link_dispatched">Link handed to Android. Check which page actually opened.</string>
+    <string name="hands_no_link_handler">No app can open this link.</string>
+    <string name="hands_link_denied">Android denied access to this link.</string>
+    <string name="hands_link_home_fallback">The target page did not open. Launched %1$s so you can continue from its screen.</string>
+    <string name="hands_no_target_link_handler">%1$s cannot open this link or be launched.</string>
 </resources>

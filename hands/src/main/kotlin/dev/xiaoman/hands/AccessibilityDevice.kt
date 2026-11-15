@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.content.Intent
 import android.graphics.Bitmap
@@ -30,6 +31,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.xmlpull.v1.XmlPullParser
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executor
 import kotlin.coroutines.resume
@@ -357,6 +359,20 @@ class AccessibilityDevice(
         } else perform()
     }
 
+    /** Snapshot the system handlers without opening a screen or changing a setting. */
+    suspend fun operatorNotes(english: Boolean): String {
+        val actions = withContext(Dispatchers.Main.immediate) {
+            serviceProvider()?.refreshGlobalActions()
+        } ?: emptySet()
+        return withContext(Dispatchers.IO) {
+            AppLinks.operatorNotes(english, actions, ::canResolve) { resources().getString(it) }
+        }
+    }
+
+    private fun canResolve(intent: Intent): Boolean =
+        appContext.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.let { it.exported && it.enabled } == true
+
     private fun launch(service: XiaomanAccessibilityService, packageName: String): ActionResult {
         val intent = appContext.packageManager.getLaunchIntentForPackage(packageName)
             ?: return ActionResult(false, resources().getString(R.string.hands_app_missing, packageName))
@@ -375,14 +391,42 @@ class AccessibilityDevice(
             }
             return result
         }
-        val intent = try {
-            AppLinks.intentFor(uri) ?: Intent(Intent.ACTION_VIEW, uri)
+        val systemIntent = try {
+            AppLinks.intentFor(uri)
         } catch (e: IllegalArgumentException) {
             return ActionResult(false, e.message)
         }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        action.packageName?.let { intent.setPackage(it) }
-        return start(service, intent, "opened ${action.uri}")
+        if (systemIntent != null) {
+            if (action.packageName != null) return ActionResult(false, resources().getString(R.string.hands_unexpected_target_app))
+            systemIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            return start(service, systemIntent, "opened ${action.uri.substringBefore('?')}")
+        }
+
+        val target = action.packageName
+        val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (target != null) intent.setPackage(target)
+        val description = resources().getString(R.string.hands_link_dispatched)
+        return try {
+            if (target != null && !canResolve(intent)) return openAppFallback(service, target)
+            service.startActivity(intent)
+            ActionResult(true, description)
+        } catch (e: ActivityNotFoundException) {
+            if (target != null) openAppFallback(service, target)
+            else ActionResult(false, resources().getString(R.string.hands_no_link_handler))
+        } catch (e: SecurityException) {
+            ActionResult(false, resources().getString(R.string.hands_link_denied))
+        }
+    }
+
+    private fun openAppFallback(service: XiaomanAccessibilityService, target: String): ActionResult {
+        val launched = launch(service, target)
+        return if (launched.ok) {
+            ActionResult(
+                ok = false,
+                message = resources().getString(R.string.hands_link_home_fallback, target),
+                openedAppFallback = true,
+            )
+        } else ActionResult(false, resources().getString(R.string.hands_no_target_link_handler, target))
     }
 
     /** Starts from the service context: an app bound as an accessibility service may start activities from the background. */
@@ -410,9 +454,69 @@ class AccessibilityDevice(
             .sortedBy { it.label }
     }
 
+    override suspend fun appSchemes(): Map<String, List<String>> = withContext(Dispatchers.IO) {
+        val pm = appContext.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        @Suppress("DEPRECATION")
+        pm.queryIntentActivities(intent, 0)
+            .mapNotNull { it.activityInfo?.packageName }
+            .distinct()
+            .mapNotNull { pkg -> schemesOf(pm, pkg)?.takeIf { it.isNotEmpty() }?.let { pkg to it } }
+            .toMap()
+    }
+
+    /** Schemes of one app, read from the compiled manifest inside its APK; null when unreadable. */
+    private fun schemesOf(pm: PackageManager, packageName: String): List<String>? = try {
+        val parser = pm.getResourcesForApplication(packageName)
+            .assets.openXmlResourceParser(MANIFEST_FILE)
+        val schemes = linkedSetOf<String>()
+        var filter: FilterScan? = null
+        try {
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                when (event) {
+                    XmlPullParser.START_TAG -> when (parser.name) {
+                        "intent-filter" -> filter = FilterScan()
+                        "action" -> if (filter != null && parser.getAttributeValue(ANDROID_NS, "name") == Intent.ACTION_VIEW) {
+                            filter!!.view = true
+                        }
+                        "data" -> if (filter != null) {
+                            parser.getAttributeValue(ANDROID_NS, "scheme")?.let { filter!!.schemes += it }
+                        }
+                    }
+                    XmlPullParser.END_TAG -> if (parser.name == "intent-filter") {
+                        filter?.let { if (it.view) schemes += it.schemes.filter(::usefulScheme) }
+                        filter = null
+                    }
+                }
+                event = parser.next()
+            }
+        } finally {
+            parser.close()
+        }
+        schemes.take(MAX_SCHEMES_PER_APP)
+    } catch (e: Exception) {
+        Log.w(TAG, "cannot read deep links of $packageName: ${e.message}")
+        null
+    }
+
+    private class FilterScan {
+        var view = false
+        val schemes = mutableListOf<String>()
+    }
+
+    /** Custom schemes only: web, file and package links are noise for choosing an action. */
+    private fun usefulScheme(scheme: String): Boolean =
+        scheme.length in 2..24 && scheme !in NOISY_SCHEMES && SCHEME_FORM.matches(scheme)
+
     companion object {
         const val NOT_CONNECTED = "无障碍服务未开启"
         private const val TAG = "Xiaoman"
+        private const val MANIFEST_FILE = "AndroidManifest.xml"
+        private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
+        private const val MAX_SCHEMES_PER_APP = 6
+        private val SCHEME_FORM = Regex("[a-z][a-z0-9+.-]*")
+        private val NOISY_SCHEMES = setOf("http", "https", "file", "content", "package", "android-app", "javascript", "mailto", "tel", "sms")
         private const val SCREENSHOT_INTERVAL_MS = 1050L
         private const val SCREENSHOT_ATTEMPTS = 3
         private const val TAP_MS = 60L

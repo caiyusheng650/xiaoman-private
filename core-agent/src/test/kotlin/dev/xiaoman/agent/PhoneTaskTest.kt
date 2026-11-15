@@ -226,6 +226,21 @@ class PhoneTaskTest {
     }
 
     @Test
+    fun failedDeepLinkWithAppFallbackContinuesFromTheScreen() = runTest {
+        val h = Harness(device = FakeDevice(settings), language = { AgentLanguage.ENGLISH })
+        h.device.result = ActionResult(ok = false, message = "App launched", openedAppFallback = true)
+        h.operator.reply(op("""{"type":"deeplink","uri":"example://page","packageName":"com.example"}"""))
+            .reply(op("""{"type":"finish","success":true,"summary":"Target page verified"}"""))
+
+        val finished = h.agent.runPhoneTask("Open the target page", null, h.events, h.stop)
+
+        assertEquals(2, h.operator.requests.size)
+        assertTrue("The link did not open the target page." in h.operator.requests.last().messages.last().text)
+        assertFalse(h.events.of<AgentEvent.StepExecuted>().single().result.ok)
+        assertEquals("Target page verified", finished.summary)
+    }
+
+    @Test
     fun askUserAnswerGoesIntoHistory() = runTest {
         val h = Harness(device = FakeDevice(settings), users = FakeUsers("选快车"))
         h.operator

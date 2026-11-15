@@ -64,6 +64,21 @@ class AppLinksTest {
     }
 
     @Test
+    fun operatorNotesIncludeOnlyAvailableRoutes() {
+        val notes = AppLinks.operatorNotes(
+            english = true,
+            availableActions = setOf(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS),
+            canHandle = { it.action == android.provider.Settings.ACTION_DISPLAY_SETTINGS },
+            actionLabel = { "Open notifications" },
+        )
+
+        kotlin.test.assertTrue("xiaoman://notifications/open" in notes)
+        kotlin.test.assertTrue("xiaoman://display/open" in notes)
+        assertFalse("xiaoman://screenshot/take" in notes)
+        assertFalse("xiaoman://bluetooth/open" in notes)
+    }
+
+    @Test
     fun malformedOrUnknownLinksAreRejected() {
         for (link in listOf("xiaoman://alarm/set?hour=24", "xiaoman://alarm/set?minute=5", "xiaoman://alarm/set?hour=8&minute=60",
             "xiaoman://alarm/delete?hour=8", "xiaoman://call/dial?number=110")) {

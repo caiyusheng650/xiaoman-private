@@ -13,56 +13,62 @@ object AppLinks {
     const val SYSTEM_SCREENSHOT_URI = "$SCHEME://$SCREENSHOT_ROUTE"
     private const val MAX_LABEL = 60
 
-    internal data class GlobalAction(val id: Int, val label: String, val labelRes: Int)
+    internal data class GlobalAction(val id: Int, val labelRes: Int)
+    private data class IntentRoute(val action: String, val chinese: String, val english: String)
 
     private val globalActions = mapOf(
-        "quick-settings/open" to GlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS, "展开快捷设置", R.string.hands_action_quick_settings),
-        "recents/open" to GlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS, "打开最近任务", R.string.hands_action_recents),
-        "notifications/open" to GlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS, "展开通知栏", R.string.hands_action_notifications),
-        "lock-screen/lock" to GlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN, "锁屏", R.string.hands_action_lock),
-        SCREENSHOT_ROUTE to GlobalAction(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT, "系统截屏", R.string.hands_action_screenshot),
+        "quick-settings/open" to GlobalAction(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS, R.string.hands_action_quick_settings),
+        "recents/open" to GlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS, R.string.hands_action_recents),
+        "notifications/open" to GlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS, R.string.hands_action_notifications),
+        "lock-screen/lock" to GlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN, R.string.hands_action_lock),
+        SCREENSHOT_ROUTE to GlobalAction(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT, R.string.hands_action_screenshot),
     )
 
-    private val settingsPanels = mapOf(
-        "internet/open" to (Settings.Panel.ACTION_INTERNET_CONNECTIVITY to "网络设置面板"),
-        "volume/open" to (Settings.Panel.ACTION_VOLUME to "音量设置面板"),
-        "display/open" to (Settings.ACTION_DISPLAY_SETTINGS to "显示设置"),
-        "bluetooth/open" to (Settings.ACTION_BLUETOOTH_SETTINGS to "蓝牙设置"),
+    private val intentRoutes = mapOf(
+        "internet/open" to IntentRoute(Settings.Panel.ACTION_INTERNET_CONNECTIVITY, "打开网络设置面板", "Open the Internet panel"),
+        "volume/open" to IntentRoute(Settings.Panel.ACTION_VOLUME, "打开音量设置面板", "Open the volume panel"),
+        "display/open" to IntentRoute(Settings.ACTION_DISPLAY_SETTINGS, "打开显示设置", "Open Display settings"),
+        "bluetooth/open" to IntentRoute(Settings.ACTION_BLUETOOTH_SETTINGS, "打开蓝牙设置", "Open Bluetooth settings"),
+        "alarm/set?hour=7&minute=0" to IntentRoute(AlarmClock.ACTION_SET_ALARM, "打开预填闹钟页（示例时间）", "Open a prefilled alarm (example time)"),
+        "timer/set?seconds=300" to IntentRoute(AlarmClock.ACTION_SET_TIMER, "打开预填计时器（示例时长）", "Open a prefilled timer (example duration)"),
     )
 
-    val operatorNotes: String = buildString {
-        appendLine("目标匹配时优先用 deeplink 调用以下 Android 入口。")
-        globalActions.forEach { (path, route) -> appendLine("- xiaoman://$path：${route.label}") }
-        settingsPanels.forEach { (path, route) -> appendLine("- xiaoman://$path：打开${route.second}，不改变设置") }
-        appendLine("- xiaoman://alarm/set?hour=7&minute=0：打开预填闹钟页")
-        appendLine("- xiaoman://timer/set?seconds=300：打开预填计时器")
-        appendLine("入口执行失败时重新观察界面，换用系统控件；不要重复执行已被系统接受的全局动作。")
-        appendLine("系统接受截屏请求后会结束本轮操作。若截屏后还需完成其他步骤，在 deeplink 动作中设置 continueAfterScreenshot=true。")
-        append("只有确认图片已保存才报告保存成功。闹钟和计时器需确认页面是否已保存或启动。")
+    internal fun operatorNotes(
+        english: Boolean,
+        availableActions: Set<Int>,
+        canHandle: (Intent) -> Boolean,
+        actionLabel: (Int) -> String,
+    ): String = buildString {
+        val actions = globalActions.filterValues { it.id in availableActions }
+        val intents = intentRoutes.filterValues { canHandle(Intent(it.action)) }
+        if (actions.isEmpty() && intents.isEmpty()) {
+            append(if (english) "No registered Android entry points are available right now." else "当前没有可用的已登记 Android 入口。")
+            return@buildString
+        }
+        appendLine(if (english) "Available Android entry points. Prefer these when the goal matches:" else "当前可用的 Android 入口。目标匹配时优先使用：")
+        actions.forEach { (path, route) -> appendLine("- $SCHEME://$path: ${actionLabel(route.labelRes)}") }
+        intents.forEach { (path, route) -> appendLine("- $SCHEME://$path: ${if (english) route.english else route.chinese}") }
+        appendLine(if (english) {
+            "If an entry point fails, observe the screen and use its controls. Verify the actual result before claiming completion."
+        } else {
+            "调用失败时重新观察屏幕并使用可见控件。检查实际结果再报告完成。"
+        })
+        if (SCREENSHOT_ROUTE in actions) {
+            append(if (english) {
+                "Do not repeat an accepted screenshot. Set continueAfterScreenshot=true only when more steps are needed."
+            } else {
+                "截屏请求已被系统接受后不要重复。仅在还有后续步骤时设置 continueAfterScreenshot=true。"
+            })
+        }
     }
 
-    fun operatorNotes(english: Boolean): String = if (english) """
-        Prefer these Android deeplinks when the goal matches:
-        - xiaoman://quick-settings/open: open Quick Settings
-        - xiaoman://recents/open: open Recents
-        - xiaoman://notifications/open: open notifications
-        - xiaoman://lock-screen/lock: lock the screen
-        - xiaoman://screenshot/take: request a system screenshot
-        - xiaoman://internet/open and xiaoman://volume/open: open system panels
-        - xiaoman://display/open and xiaoman://bluetooth/open: open Settings pages
-        - xiaoman://alarm/set?hour=7&minute=0: open a prefilled alarm
-        - xiaoman://timer/set?seconds=300: open a prefilled timer
-        If a route fails, observe the screen and use the available controls. Avoid repeating accepted global actions.
-        Acceptance of a screenshot request ends the operator run. Set continueAfterScreenshot=true on its deeplink action only when more steps are needed.
-        Verify any saved screenshot, alarm or started timer before claiming completion.
-    """.trimIndent() else operatorNotes
 
     internal fun globalActionFor(uri: Uri): GlobalAction? = route(uri)?.let { globalActions[it] }
 
     /** Returns null for external links. Unknown Xiaoman links fail instead of leaving the app. */
     internal fun intentFor(uri: Uri): Intent? {
         val path = route(uri) ?: return null
-        settingsPanels[path]?.let { return Intent(it.first) }
+        intentRoutes[path]?.let { return Intent(it.action) }
         return when (path) {
             "alarm/set" -> setAlarm(uri)
             "timer/set" -> setTimer(uri)

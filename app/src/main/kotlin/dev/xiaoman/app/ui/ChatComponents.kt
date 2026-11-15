@@ -22,6 +22,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.*
@@ -36,6 +38,8 @@ import dev.xiaoman.app.R
 import dev.xiaoman.app.session.ChatItem
 import dev.xiaoman.app.session.localizedText
 import dev.xiaoman.app.session.PendingQuestion
+import android.graphics.BitmapFactory
+import java.io.File
 
 @Composable
 internal fun ChatHeader(ready: Boolean, busy: Boolean, attention: Boolean, onClearHistory: (() -> Unit)?) {
@@ -275,7 +279,13 @@ internal fun ChatMessage(item: ChatItem) {
                 shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp),
                 modifier = Modifier.widthIn(max = Dimens.maxBubbleWidth).fillMaxWidth(0.86f).wrapContentWidth(Alignment.End),
             ) {
-                Text(item.text, Modifier.padding(horizontal = Space.lg, vertical = Space.md), style = MaterialTheme.typography.bodyMedium)
+                Column(Modifier.padding(horizontal = Space.lg, vertical = Space.md), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
+                    item.imagePath?.let { path ->
+                        val bitmap = remember(path) { File(path).takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() } }
+                        if (bitmap != null) Image(bitmap, null, Modifier.fillMaxWidth().heightIn(max = 240.dp))
+                    }
+                    if (item.text.isNotBlank()) Text(item.text, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
         is ChatItem.Assistant -> Box(Modifier.fillMaxWidth()) {

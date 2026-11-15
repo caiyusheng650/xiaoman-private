@@ -20,4 +20,9 @@
     <string name="hands_action_screenshot">系统截屏</string>
     <string name="hands_action_back">返回</string>
     <string name="hands_action_home">回到桌面</string>
+    <string name="hands_link_dispatched">已将链接交给 Android，请确认实际打开的页面。</string>
+    <string name="hands_no_link_handler">没有应用能打开该链接。</string>
+    <string name="hands_link_denied">Android 拒绝打开该链接。</string>
+    <string name="hands_link_home_fallback">目标页面未打开。已启动 %1$s，请从当前界面继续。</string>
+    <string name="hands_no_target_link_handler">%1$s 无法打开该链接，应用也无法启动。</string>
 </resources>

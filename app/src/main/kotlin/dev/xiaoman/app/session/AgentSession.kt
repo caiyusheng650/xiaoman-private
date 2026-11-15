@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.io.File
 
 /** Texts the session adds to the chat itself; resolved from resources by the app. */
 data class SessionTexts(
@@ -35,6 +36,8 @@ data class SessionTexts(
     val approvedOnce: (String) -> String = { "已允许：$it" },
     val approvedTask: (String) -> String = { "本次任务都允许：$it" },
     val denied: (String) -> String = { "已拒绝：$it" },
+    val imageDefaultPrompt: String = "请描述这张图片。",
+    val imageReadFailed: String = "无法读取这张图片，请换一张后再试。",
 )
 
 class PendingQuestion(
@@ -75,6 +78,7 @@ class AgentSession(
     private val historyStore: ChatHistoryStore? = null,
     private val onHistoryCleared: () -> Unit = {},
     private val onResult: (String) -> Unit = {},
+    private val chatImagesDir: File? = null,
 ) : UserChannel, ApprovalGateway {
 
     private val historyLock = Any()
@@ -160,17 +164,18 @@ class AgentSession(
     }
 
     /** Chat input: answers a pending question, else starts a chat turn. */
-    fun submit(text: String): Submit {
-        val message = text.trim()
+    fun submit(text: String, imagePng: ByteArray? = null): Submit {
+        val message = text.trim().ifEmpty { if (imagePng != null) texts().imageDefaultPrompt else "" }
         if (message.isEmpty()) return Submit.Empty
         if (answerQuestion(message)) return Submit.Answered
         val agent = agent()
         if (agent == null) {
-            add(ChatItem.User(ids.incrementAndGet(), message, System.currentTimeMillis()))
+            add(userItem(message, imagePng))
             add(ChatItem.Error(ids.incrementAndGet(), texts().notConfigured))
             return Submit.NotConfigured
         }
-        val started = launch(null, message) { agent.handle(message, listener, stopSignal) }
+        val item = userItem(message, imagePng)
+        val started = launch(null, item) { agent.handle(message, imagePng, listener, stopSignal) }
         if (!started) return Submit.Busy
         return Submit.Started
     }
@@ -259,13 +264,13 @@ class AgentSession(
     }
 
     /** Starts [block] unless something is running. [runId] is pre-registered as open (debug runs). */
-    private fun launch(runId: String?, userMessage: String? = null, block: suspend () -> Unit): Boolean {
+    private fun launch(runId: String?, userItem: ChatItem.User? = null, block: suspend () -> Unit): Boolean {
         synchronized(historyLock) {
             if (!running.compareAndSet(false, true)) return false
             historyActive = true
             finalReply = null
             taskResult = null
-            if (userMessage == null) persist() else add(ChatItem.User(ids.incrementAndGet(), userMessage, System.currentTimeMillis()))
+            if (userItem == null) persist() else add(userItem)
         }
         stopSignal.reset()
         if (runId != null) synchronized(openRuns) { openRuns += runId }
@@ -316,6 +321,12 @@ class AgentSession(
     private fun add(item: ChatItem) = synchronized(historyLock) {
         _items.value = (_items.value + item).takeLast(MAX_ITEMS)
         persist()
+    }
+
+    private fun userItem(message: String, imagePng: ByteArray?): ChatItem.User {
+        val id = ids.incrementAndGet()
+        val imagePath = imagePng?.let { bytes -> chatImagesDir?.let { ChatImages.save(it, id, bytes) } }
+        return ChatItem.User(id, message, System.currentTimeMillis(), imagePath)
     }
 
     private fun persist() {

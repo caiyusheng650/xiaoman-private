@@ -73,6 +73,10 @@ interface Agent {
     /** Handles one chat turn: replies, memory tools, or a phone task. Suspends until the turn is done. */
     suspend fun handle(userMessage: String, listener: AgentListener, stop: StopSignal)
 
+    /** Like [handle], with one PNG image selected by the user for a multimodal chat model. */
+    suspend fun handle(userMessage: String, imagePng: ByteArray?, listener: AgentListener, stop: StopSignal) =
+        handle(userMessage, listener, stop)
+
     /** Runs one phone task directly (used by the developer CLI and skill tests). */
     suspend fun runPhoneTask(goal: String, skillName: String?, listener: AgentListener, stop: StopSignal): AgentEvent.PhoneTaskFinished
 }

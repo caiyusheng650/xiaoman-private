@@ -40,6 +40,7 @@ internal class ChatTools(
     /** Asks the user to confirm a skill change; null answer means the change is refused. */
     private val confirmSkill: (suspend (prompt: String) -> Boolean)? = null,
     private val language: AgentLanguage = AgentLanguage.CHINESE,
+    private val inspectScreen: (suspend () -> String)? = null,
 ) {
     suspend fun execute(call: ToolCall, taskId: String, emit: (AgentEvent) -> Unit): String = try {
         val args = parseArgs(call.argumentsJson)
@@ -53,6 +54,7 @@ internal class ChatTools(
             AgentTools.SKILL_DELETE -> deleteSkill(args, taskId, emit)
             AgentTools.REMINDER_SET -> reminder(args)
             AgentTools.PHONE_TASK -> if (phoneTasks) phone(args) else error("这里不能操作手机，请用其他工具或告诉用户自己操作")
+            AgentTools.INSPECT_SCREEN -> inspectScreen?.invoke() ?: error("当前环境无法读取手机屏幕")
             else -> external(call, taskId, emit)
         }
     } catch (e: CancellationException) {

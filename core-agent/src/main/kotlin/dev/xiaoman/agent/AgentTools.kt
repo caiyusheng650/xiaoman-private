@@ -19,6 +19,7 @@ object AgentTools {
     const val SKILL_DELETE = "skill_delete"
     const val REMINDER_SET = "reminder_set"
     const val PHONE_TASK = "phone_task"
+    const val INSPECT_SCREEN = "inspect_screen"
 
     /** Tools only offered when a writable [dev.xiaoman.api.SkillStore] is available. */
     val SKILL_TOOL_NAMES = setOf(SKILL_WRITE, SKILL_DELETE)
@@ -96,6 +97,10 @@ object AgentTools {
                 "goal" to str("具体目标，包含关键参数，如 用高德打车回家（北京市海淀区某某路 1 号），选快车"),
                 "skill" to str("可选，使用的技能名"),
             ),
+        ),
+        ToolSpec(
+            INSPECT_SCREEN, "只读查看当前手机屏幕（截图与无障碍文字），不点击、不操作、不保存截图。用户问‘这是什么’、‘屏幕上有什么’等指当前屏幕的问题时使用。",
+            schema(emptyList()),
         ),
     )
 

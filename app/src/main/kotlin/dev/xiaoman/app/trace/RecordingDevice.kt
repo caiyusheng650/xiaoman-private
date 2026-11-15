@@ -21,7 +21,12 @@ class RecordingDevice(
         return screen
     }
 
+    /** Chat screen inspection is read-only and must not create a persisted trace screenshot. */
+    override suspend fun inspectScreen(): ScreenState = delegate.inspectScreen()
+
     override suspend fun perform(action: Action): ActionResult = delegate.perform(action)
 
     override suspend fun installedApps(): List<AppInfo> = delegate.installedApps()
+
+    override suspend fun appSchemes(): Map<String, List<String>> = delegate.appSchemes()
 }

@@ -154,7 +154,7 @@
     <string name="assist_guide_launch_body">如果手机支持，在系统设置的手势或侧键选项中，将长按电源键设为唤起助手。也可以尝试系统提供的助手手势。</string>
     <string name="assist_guide_type_title">3. 输入并发送</string>
     <string name="assist_guide_type_body">唤起小满后，键盘会自动打开。输入消息，再点发送箭头。任务运行时，顶部会显示进度；结束后可从通知或聊天页查看回复。</string>
-    <string name="settings_chat_description">负责和你对话、决定下一步做什么。</string>
+    <string name="settings_chat_description">负责和你对话、决定下一步做什么。发送聊天图片时需要支持图片输入的多模态模型。</string>
     <string name="settings_operator_description">负责看屏幕和点按，需要支持图片。</string>
     <string name="model_none">服务商没有返回可用模型</string>
     <string name="model_timeout">请求超时，请检查网络后重试</string>
@@ -180,6 +180,12 @@
     <string name="example_preference_hint">让助手慢慢懂你</string>
     <string name="example_preference_prompt">记住我买东西喜欢简单实用。</string>
     <string name="chat_welcome_type">也可以直接输入你的想法</string>
+    <string name="chat_attach_image">添加图片</string>
+    <string name="chat_remove_image">移除图片</string>
+    <string name="chat_image_selected">已添加图片</string>
+    <string name="chat_image_ready">会跟随这条消息一起发送</string>
+    <string name="chat_image_default_prompt">请描述这张图片。</string>
+    <string name="chat_image_read_failed">无法读取这张图片，请换一张后再试。</string>
     <string name="chat_latest">回到最新</string>
     <string name="chat_process_count">处理过程 · %1$d条记录</string>
     <string name="chat_process_hide">收起处理过程</string>
@@ -209,7 +215,7 @@
     <string name="guide_notifications_open">打开通知设置</string>
     <string name="guide_models_title">模型配置</string>
     <string name="guide_models_detail">连接聊天模型和操作模型</string>
-    <string name="guide_chat_model_body">填写服务商提供的 API 地址和密钥，点「获取模型列表」并选择聊天模型。如果没有返回列表，可以手动填写服务商提供的模型 ID。</string>
+    <string name="guide_chat_model_body">填写服务商提供的 API 地址和密钥，点「获取模型列表」并选择支持图片输入的多模态聊天模型。它既处理日常对话，也理解你在聊天中发送的图片。如果没有返回列表，可以手动填写服务商提供的模型 ID。</string>
     <string name="guide_operator_model_body">如果操作模型使用同一个服务商，点「与聊天模型相同」复用地址和密钥，再选一个支持图片输入的模型。两项都配置好后，点页面底部的「保存」。</string>
     <string name="guide_automation_title">任务行为</string>
     <string name="guide_automation_detail">设置尝试步数和是否记住成功路径</string>

@@ -24,6 +24,10 @@ internal class TaskRun(
     var references: String = ""
     /** Earlier successful paths (howto notes), rendered for prompts. */
     var howto: String = ""
+    /** Installed apps of this phone as `label（package）` lines, rendered for prompts. */
+    var apps: String = ""
+    /** Deep links registered by installed apps, rendered for prompts. */
+    var schemes: String = ""
     /** Placeholder values already resolved in this task. */
     val values = mutableMapOf<String, String>()
     var launchedPackage: String? = null

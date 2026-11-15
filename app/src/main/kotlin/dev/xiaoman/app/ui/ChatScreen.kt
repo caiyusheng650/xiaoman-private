@@ -2,14 +2,18 @@ package dev.xiaoman.app.ui
 
 import android.Manifest
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -26,6 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -41,6 +51,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.xiaoman.app.AppGraph
 import dev.xiaoman.app.R
 import dev.xiaoman.app.session.AgentSession
+import dev.xiaoman.app.session.ChatImages
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import dev.xiaoman.hands.XiaomanAccessibilityService
 import java.time.LocalDate
 import java.time.ZoneId
@@ -229,23 +243,72 @@ internal fun ChatInput(
 ) {
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val requester = remember { FocusRequester() }
+    var imagePng by remember { mutableStateOf<ByteArray?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            val image = withContext(Dispatchers.Default) { ChatImages.readPng(context, uri) }
+            if (image == null) Toast.makeText(context, context.getString(R.string.chat_image_read_failed), Toast.LENGTH_SHORT).show()
+            else imagePng = image
+        }
+    }
     LaunchedEffect(requestFocusOnShow) {
         if (requestFocusOnShow) {
             requester.requestFocus()
             keyboard?.show()
         }
     }
-    val canSend = text.isNotBlank() && (!busy || answering)
+    val canSend = if (answering) text.isNotBlank() else (text.isNotBlank() || imagePng != null) && !busy
     fun send() {
         if (!canSend) return
-        when (session.submit(text)) {
+        when (session.submit(text, imagePng)) {
             AgentSession.Submit.Busy, AgentSession.Submit.Empty -> Unit
-            else -> { onChange(""); focus.clearFocus(); keyboard?.hide(); onSent() }
+            else -> { imagePng = null; onChange(""); focus.clearFocus(); keyboard?.hide(); onSent() }
         }
     }
     Surface(color = containerColor, tonalElevation = 0.dp) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            val selected = imagePng
+            if (selected != null) {
+                val thumb = remember(selected) { decodeThumbnail(selected) }
+                Row(
+                    Modifier.pageWidth()
+                        .padding(start = Dimens.pageHorizontal, end = Dimens.pageHorizontal, top = Space.sm)
+                        .height(56.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Space.sm),
+                ) {
+                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))) {
+                        if (thumb != null) {
+                            Image(
+                                thumb,
+                                contentDescription = stringResource(R.string.chat_image_selected),
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Outlined.Image, null,
+                                modifier = Modifier.align(Alignment.Center).size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.chat_image_selected), style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            stringResource(R.string.chat_image_ready),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { imagePng = null }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Outlined.Close, stringResource(R.string.chat_remove_image), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
             Row(
                 Modifier.pageWidth().padding(horizontal = Dimens.pageHorizontal, vertical = 10.dp),
                 verticalAlignment = Alignment.Bottom,
@@ -253,6 +316,22 @@ internal fun ChatInput(
                 OutlinedTextField(
                     value = text, onValueChange = onChange, modifier = Modifier.weight(1f).focusRequester(requester),
                     placeholder = { Text(stringResource(if (answering) R.string.chat_answer_hint else R.string.chat_input_hint), style = MaterialTheme.typography.bodyMedium) },
+                    leadingIcon = if (answering) null else {
+                        @Composable {
+                            IconButton(
+                                onClick = { imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                                enabled = !busy,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Image,
+                                    contentDescription = stringResource(R.string.chat_attach_image),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    },
                     shape = MaterialTheme.shapes.extraLarge, textStyle = MaterialTheme.typography.bodyMedium,
                     minLines = 1, maxLines = 4,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -275,6 +354,17 @@ internal fun ChatInput(
             }
         }
     }
+}
+
+/** Decodes a small preview of the picked image so the thumbnail row stays cheap. */
+private fun decodeThumbnail(png: ByteArray): ImageBitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(png, 0, png.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 256) sample *= 2
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    return BitmapFactory.decodeByteArray(png, 0, png.size, options)?.asImageBitmap()
 }
 
 @Composable

@@ -16,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,6 +67,22 @@ fun SettingsScreen(graph: AppGraph) {
     val parsed = form.toSettings()
     val feedback = rememberPageFeedbackState()
     val scroll = rememberScrollState()
+    val invalidForm = stringResource(R.string.settings_invalid_form)
+    val savedMessage = stringResource(R.string.settings_saved)
+    val failedMessage = stringResource(R.string.settings_save_failed)
+    fun save() {
+        val settings = parsed
+        if (settings == null) {
+            feedback.show(invalidForm, isError = true)
+            return
+        }
+        try {
+            store.save(settings)
+            feedback.show(savedMessage)
+        } catch (e: Exception) {
+            feedback.show(failedMessage, isError = true)
+        }
+    }
     var guideOpen by rememberSaveable { mutableStateOf(false) }
     var guideTopic by rememberSaveable { mutableStateOf<SetupTopic?>(null) }
     fun openGuide(topic: SetupTopic? = null) {
@@ -82,12 +97,19 @@ fun SettingsScreen(graph: AppGraph) {
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         // Fixed page header, same component as every other tab — the old in-scroll titleLarge
         // disappeared while scrolling and used a larger type size than any other page.
-        ScreenHeader(title = stringResource(R.string.settings_title))
+        ScreenHeader(
+            title = stringResource(R.string.settings_title),
+            // Saving belongs to the page itself, so it sits in the header instead of a bottom bar.
+            action = {
+                TextButton(onClick = { save() }) { Text(stringResource(R.string.settings_save)) }
+            },
+        )
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Column(
                 Modifier.align(Alignment.TopCenter).pageWidth().verticalScroll(scroll)
                     .padding(horizontal = Dimens.pageHorizontal)
-                    .padding(bottom = Space.lg),
+                    // Extra tail space so the floating feedback pill never covers the last card.
+                    .padding(bottom = 64.dp),
                 verticalArrangement = Arrangement.spacedBy(Dimens.cardGap),
             ) {
             SetupGuideEntry { openGuide() }
@@ -148,34 +170,12 @@ fun SettingsScreen(graph: AppGraph) {
                 }) { Text(stringResource(if (copied) R.string.settings_path_copied else R.string.settings_copy_path)) }
             }
         }
-            // Floats over the end of the scroll body, never over the save button below it.
+            // Floats over the blank tail of the scroll body; the padded bottom keeps it clear of cards.
             PageFeedback(
                 feedback,
                 Modifier.align(Alignment.BottomCenter)
                     .padding(horizontal = Dimens.pageHorizontal, vertical = Space.md),
             )
-        }
-
-        BottomActionBar {
-            val invalidForm = stringResource(R.string.settings_invalid_form)
-            val savedMessage = stringResource(R.string.settings_saved)
-            val failedMessage = stringResource(R.string.settings_save_failed)
-            Button(
-                onClick = {
-                    val settings = parsed
-                    if (settings == null) {
-                        feedback.show(invalidForm, isError = true)
-                        return@Button
-                    }
-                    try {
-                        store.save(settings)
-                        feedback.show(savedMessage)
-                    } catch (e: Exception) {
-                        feedback.show(failedMessage, isError = true)
-                    }
-                },
-                modifier = Modifier.weight(1f),
-            ) { Text(stringResource(R.string.settings_save)) }
         }
     }
 }

@@ -1,5 +1,6 @@
 package dev.xiaoman.agent
 
+import dev.xiaoman.api.AppInfo
 import dev.xiaoman.api.Decision
 import dev.xiaoman.api.LlmException
 
@@ -18,6 +19,12 @@ object Prompts {
 
     const val EXTERNAL_TOOLS_HINT =
         "- 名字带「__」的工具来自外部服务（地图、车票、出行、点餐等）。能用这些工具查到或办成的事，优先用工具，不必操作手机；工具的结果以返回内容为准。需要确认的外部操作会先询问用户。"
+
+    /** The user attached the picture in question, so screen reading must not be used instead. */
+    fun userImageHint(language: AgentLanguage): String = language.text(
+        "本轮用户已经随消息发来图片，图片就是要问的画面。请直接根据这张图片回答，不要调用 inspect_screen，也不要因为无障碍服务未开启而说看不到屏幕。",
+        "The user attached an image with this message; that image is what the question is about. Answer from it directly. Do not call inspect_screen, and do not say the screen is unreadable because accessibility is turned off.",
+    )
 
     /** Persona where Xiaoman cannot operate the phone (web version): external tools and links instead. */
     const val NO_PHONE_PERSONA = """你是小满，用户的私人助手。你说话简洁、友好。
@@ -56,6 +63,46 @@ object Prompts {
     const val CHAT_SKILL_PHONE_REFUSED = "这是聊天工作流，不能通过 phone_task 执行，请直接在对话里按技能说明完成"
     const val NO_SKILLS = "（暂无技能，phone_task 将直接按目标操作）"
     const val MEMORY_HEADER = "## 可能相关的记忆"
+    const val APPS_HEADER = "## 手机上已安装的应用"
+    const val APPS_HINT = "打开应用时使用这里的包名，不要猜其他设备上的包名。"
+
+    /** One `- label（package）` line per app, capped so a full launcher cannot flood the prompt. */
+    internal fun appsSection(apps: List<AppInfo>): String {
+        if (apps.isEmpty()) return ""
+        val lines = apps.map { "- ${it.label}（${it.packageName}）" }
+        val text = buildString {
+            for (line in lines) {
+                if (length + line.length > MAX_APPS_CHARS) break
+                append(line).append('\n')
+            }
+        }
+        return text.trimEnd()
+    }
+
+    private const val MAX_APPS_CHARS = 4000
+
+    const val SCHEMES_HEADER = "## 应用声明的 URI 协议"
+    const val SCHEMES_HINT = "这些协议仅用于识别可能的处理应用。使用技能、官方文档或用户提供的完整链接，并指定目标包名；不知道页面地址时直接打开应用。"
+    const val SCHEMES_HINT_EN = "These schemes only identify possible handlers. Use a full link from a skill, official documentation, or the user, and specify the target package. If the page URL is unknown, launch the app."
+
+    /** One `- label（package）：scheme://` line per app that declares deep links, capped like [appsSection]. */
+    internal fun schemesSection(apps: List<AppInfo>, schemes: Map<String, List<String>>): String {
+        if (schemes.isEmpty()) return ""
+        val labels = apps.associate { it.packageName to it.label }
+        val lines = schemes.entries
+            .filter { it.value.isNotEmpty() }
+            .sortedBy { labels[it.key] ?: it.key }
+            .map { (pkg, list) -> "- ${labels[pkg] ?: pkg}（$pkg）：${list.joinToString("、") { "$it://" }}" }
+        val text = buildString {
+            for (line in lines) {
+                if (length + line.length > MAX_SCHEMES_CHARS) break
+                append(line).append('\n')
+            }
+        }
+        return text.trimEnd()
+    }
+
+    private const val MAX_SCHEMES_CHARS = 2000
 
     const val NOW_HEADER = "## 当前时间"
     fun nowSection(now: String, language: AgentLanguage = AgentLanguage.CHINESE) = language.text(
@@ -67,7 +114,10 @@ object Prompts {
     const val LLM_FAILED = "抱歉，模型服务暂时不可用，请稍后再试。"
 
     fun llmFailed(error: LlmException, language: AgentLanguage): String {
-        val message = if (error.providerCode == "SetLimitExceeded") {
+        val raw = listOfNotNull(error.message, error.providerCode).joinToString(" ").lowercase()
+        val message = if (raw.contains("image") && (raw.contains("support") || raw.contains("vision") || raw.contains("multimodal") || raw.contains("content type"))) {
+            language.text("当前聊天模型不支持图片输入。请到「设置」中把聊天模型换成支持图片输入的多模态模型后再试。", "This chat model does not support image input. In Settings, choose a multimodal chat model that accepts images, then try again.")
+        } else if (error.providerCode == "SetLimitExceeded") {
             language.text("模型服务因账号限额暂停。", "The model service has paused due to your account limit.")
         } else language.text(LLM_FAILED, "The model service is temporarily unavailable. Please try again later.")
         return withLlmErrorDetail(message, error, language)

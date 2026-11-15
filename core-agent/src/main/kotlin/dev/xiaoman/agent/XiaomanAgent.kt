@@ -37,8 +37,8 @@ import java.util.UUID
  */
 class XiaomanAgent(
     private val chat: LlmClient,
-    operator: LlmClient,
-    device: Device,
+    private val operator: LlmClient,
+    private val device: Device,
     private val memory: MemoryStore,
     private val skills: SkillRepository,
     sentinel: Sentinel,
@@ -53,14 +53,21 @@ class XiaomanAgent(
     /** Writable skill folder; when null the skill_write / skill_delete tools are not offered. */
     private val skillStore: SkillStore? = null,
     private val language: () -> AgentLanguage = { AgentLanguage.CHINESE },
-    operatorNotes: (AgentLanguage) -> String = { config.operatorNotes },
+    private val operatorNotes: suspend (AgentLanguage) -> String = { config.operatorNotes },
 ) : Agent {
     private val loop = OperatorLoop(operator, device, sentinel, users, config, operatorNotes)
     private val flows = FlowRunner(loop, users)
     private val historyLock = Mutex()
     private val history = ArrayDeque<ChatMessage>()
+    /** Installed apps rendered for prompts, refreshed at most every [APPS_TTL_MS]. */
+    private var appsCache: Pair<Long, String>? = null
+    /** Deep links rendered for prompts, refreshed on the same schedule as [appsCache]. */
+    private var schemesCache: Pair<Long, String>? = null
 
-    override suspend fun handle(userMessage: String, listener: AgentListener, stop: StopSignal) {
+    override suspend fun handle(userMessage: String, listener: AgentListener, stop: StopSignal) =
+        handle(userMessage, imagePng = null, listener, stop)
+
+    override suspend fun handle(userMessage: String, imagePng: ByteArray?, listener: AgentListener, stop: StopSignal) {
         val taskId = idFactory()
         val emit: (AgentEvent) -> Unit = listener::onEvent
         val replyLanguage = language()
@@ -71,13 +78,27 @@ class XiaomanAgent(
             skillStore = skillStore,
             confirmSkill = skillStore?.let { { prompt -> confirmByAsk(taskId, prompt, replyLanguage) } },
             language = replyLanguage,
+            inspectScreen = {
+                // The attached picture already shows what the user is asking about.
+                if (imagePng != null) Prompts.userImageHint(replyLanguage)
+                else inspectScreenForChat(replyLanguage, userMessage)
+            },
         )
         try {
-            val builtIn = builtInSpecs()
+            val builtIn = builtInSpecs(replyLanguage, hasUserImage = imagePng != null)
             val toolSpecs = builtIn + externalSpecs()
-            val system = ChatMessage.system(systemPrompt(userMessage, replyLanguage, hasExternalTools = toolSpecs.size > builtIn.size))
+            val system = ChatMessage.system(
+                systemPrompt(
+                    userMessage, replyLanguage,
+                    hasExternalTools = toolSpecs.size > builtIn.size,
+                    hasUserImage = imagePng != null,
+                ),
+            )
             val past = historyLock.withLock { history.toList() }
-            val turn = mutableListOf(ChatMessage.user(userMessage))
+            val turn = mutableListOf(ChatMessage(ChatRole.USER, buildList {
+                add(ContentPart.Text(userMessage))
+                imagePng?.let { add(ContentPart.ImagePng(it)) }
+            }))
             var lastText: String? = null
             var finalText: String? = null
             for (round in 0..MAX_TOOL_ROUNDS) {
@@ -105,6 +126,39 @@ class XiaomanAgent(
         } catch (e: LlmException) {
             emit(AgentEvent.Failed(taskId, Prompts.llmFailed(e, replyLanguage)))
         }
+    }
+
+    /** Uses the operator's vision-capable model for an explicit, read-only screen question. */
+    private suspend fun inspectScreenForChat(language: AgentLanguage, userQuestion: String): String {
+        val screen = device.inspectScreen()
+        if (screen.secure) return language.text(
+            "Android 将当前页面标记为受保护页面，无法读取其内容。",
+            "Android marks this as a protected screen, so its contents cannot be inspected.",
+        )
+        val readableNodes = screen.nodes.filterNot { it.password }
+        val shownNodes = readableNodes.take(80)
+        val screenText = Prompts.screenSection(
+            screen.packageName,
+            screen.activityName,
+            shownNodes.joinToString("\n") { ScreenText.nodeLine(it) },
+            readableNodes.size - shownNodes.size,
+            language,
+        )
+        val parts = buildList {
+            add(ContentPart.Text(language.text("用户问题：", "User question: ") + userQuestion + "\n\n" + screenText))
+            if (screen.nodes.none { it.password }) screen.screenshotPng?.let { add(ContentPart.ImagePng(it)) }
+        }
+        val system = language.text(
+            "你是只读的手机屏幕观察员。结合用户当前问题、截图和无障碍文字，用简短自然语言说明屏幕上实际可见的内容。优先依据截图；无法辨认时明确说不确定。不要执行操作、不要编造屏幕外的信息，也不要复述密码字段。",
+            "You are a read-only phone screen observer. Based on the user's current question, screenshot, and accessibility text, briefly describe what is actually visible. Prefer the screenshot; say when something is unclear. Do not perform actions, invent off-screen facts, or repeat password fields.",
+        )
+        val observed = operator.complete(
+            ChatRequest(listOf(ChatMessage.system(system), ChatMessage(ChatRole.USER, parts))),
+        ).text.trim()
+        return observed.takeIf { it.isNotBlank() }?.take(6000) ?: language.text(
+            "我没有读到清晰的屏幕内容。",
+            "I couldn't read the screen clearly.",
+        )
     }
 
     override suspend fun runPhoneTask(goal: String, skillName: String?, listener: AgentListener, stop: StopSignal): AgentEvent.PhoneTaskFinished =
@@ -140,6 +194,8 @@ class XiaomanAgent(
         val outcome = try {
             task.references = references(skill)
             task.howto = howto(goal, skill)
+            task.apps = appsSection()
+            task.schemes = schemesSection()
             val flow = skill?.flow
             if (flow != null && flow.steps.isNotEmpty()) flows.run(task, flow)
             else loop.tryStandaloneScreenshot(task) ?: loop.run(task)
@@ -159,8 +215,17 @@ class XiaomanAgent(
         return finish(outcome.success, outcome.summary, task.steps)
     }
 
-    private fun builtInSpecs(): List<ToolSpec> {
-        var specs = AgentTools.specs
+    private fun builtInSpecs(language: AgentLanguage, hasUserImage: Boolean = false): List<ToolSpec> {
+        var specs = AgentTools.specs.map { spec ->
+            if (spec.name != AgentTools.INSPECT_SCREEN) spec else spec.copy(
+                description = language.text(
+                    "只读查看当前手机屏幕（截图与无障碍文字），不点击、不操作、不保存截图。用户问‘这是什么’、‘屏幕上有什么’等指当前屏幕的问题时使用。用户已经随消息发来图片时不要使用。",
+                    "Read the current phone screen using its screenshot and accessibility text. Read-only: do not tap, operate, or save a screenshot. Use when the user asks what something is or what is on the current screen. Do not use it when the user attached an image with the message.",
+                ),
+            )
+        }
+        // The attached picture already shows the scene, and screen reading fails when accessibility is off.
+        if (hasUserImage) specs = specs.filter { it.name != AgentTools.INSPECT_SCREEN }
         if (!config.phoneTasks) specs = specs.filter { it.name != AgentTools.PHONE_TASK }
         if (skillStore == null) specs = specs.filter { it.name !in AgentTools.SKILL_TOOL_NAMES }
         return specs
@@ -186,16 +251,42 @@ class XiaomanAgent(
         }
     }
 
-    private suspend fun systemPrompt(userMessage: String, language: AgentLanguage, hasExternalTools: Boolean = false): String = buildString {
+    private suspend fun systemPrompt(
+        userMessage: String,
+        language: AgentLanguage,
+        hasExternalTools: Boolean = false,
+        hasUserImage: Boolean = false,
+    ): String = buildString {
         append(Prompts.persona(persona, language).trim()).append("\n\n").append(language.chatInstruction())
         if (hasExternalTools) append("\n").append(language.text(Prompts.EXTERNAL_TOOLS_HINT, "Tools containing __ come from external services. Prefer them when they can complete a task. Use their actual results and wait for required confirmation."))
+        if (hasUserImage) append("\n").append(Prompts.userImageHint(language))
         append("\n\n").append(Prompts.nowSection(ReminderTimes.promptNow(clock()), language))
         val list = quietly(emptyList()) { skills.list() }
         if (config.phoneTasks) {
             append("\n\n").append(language.text(Prompts.SKILLS_HEADER, "## Device skills (the phone_task skill parameter)")).append('\n')
             val phoneSkills = list.filter { it.channel != SkillChannel.CHAT }
             if (phoneSkills.isEmpty()) append(language.text(Prompts.NO_SKILLS, "No skills available. Use the task goal directly."))
-            else phoneSkills.forEach { append("- ").append(it.name).append(": ").append(it.description).append('\n') }
+            else phoneSkills.forEach { skill ->
+                append("- ").append(skill.name).append(": ").append(skill.description)
+                if (skill.deeplinks.isNotEmpty()) {
+                    append(" [").append(skill.deeplinks.entries.joinToString("；") { "${it.key}=${it.value}" }).append(']')
+                }
+                append('\n')
+            }
+            val platform = quietly("") { operatorNotes(language) }
+            if (platform.isNotBlank()) append('\n').append(platform).append('\n')
+            val apps = appsSection()
+            if (apps.isNotBlank()) {
+                append('\n').append(language.text(Prompts.APPS_HEADER, "## Apps installed on this phone")).append('\n')
+                append(language.text(Prompts.APPS_HINT, "Use these packages when opening an app; do not guess packages from other devices.")).append('\n')
+                append(apps).append('\n')
+            }
+            val links = schemesSection()
+            if (links.isNotBlank()) {
+                append('\n').append(language.text(Prompts.SCHEMES_HEADER, "## URI schemes declared by apps")).append('\n')
+                append(language.text(Prompts.SCHEMES_HINT, Prompts.SCHEMES_HINT_EN)).append('\n')
+                append(links).append('\n')
+            }
         }
         val chatSkills = list.filter { it.channel == SkillChannel.CHAT }
         if (chatSkills.isNotEmpty()) {
@@ -230,6 +321,22 @@ class XiaomanAgent(
         while (history.size > HISTORY_LIMIT) history.removeFirst()
         // Never start the window with an assistant message.
         while (history.firstOrNull()?.role == ChatRole.ASSISTANT) history.removeFirst()
+    }
+
+    /** Installed apps of this phone; cached so chat turns and steps do not query the package manager every time. */
+    private suspend fun appsSection(): String {
+        val now = clock()
+        appsCache?.let { (at, text) -> if (now - at < APPS_TTL_MS) return text }
+        return quietly("") { Prompts.appsSection(device.installedApps()) }.also { appsCache = now to it }
+    }
+
+    /** Deep links of installed apps, cached like [appsSection]. */
+    private suspend fun schemesSection(): String {
+        val now = clock()
+        schemesCache?.let { (at, text) -> if (now - at < APPS_TTL_MS) return text }
+        return quietly("") {
+            Prompts.schemesSection(device.installedApps(), device.appSchemes())
+        }.also { schemesCache = now to it }
     }
 
     private suspend fun references(skill: Skill?): String {
@@ -287,6 +394,7 @@ class XiaomanAgent(
     companion object {
         const val MAX_TOOL_ROUNDS = 8
         const val HISTORY_LIMIT = 20
+        const val APPS_TTL_MS = 10 * 60 * 1000L
         const val MEMORY_HITS = 5
         const val HOWTO_TYPE = "howto"
         const val PATH_CATEGORY = "path"

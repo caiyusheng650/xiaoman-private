@@ -122,6 +122,8 @@ data class ActionResult(
     val message: String? = null,
     /** The Android system accepted the screenshot request. Saving takes place asynchronously. */
     val screenshotRequested: Boolean = false,
+    /** The link failed and its target app was launched so the operator can navigate from there. */
+    val openedAppFallback: Boolean = false,
 )
 
 @Serializable
@@ -131,8 +133,14 @@ data class AppInfo(val packageName: String, val label: String)
 interface Device {
     suspend fun observe(): ScreenState
 
+    /** Read the current screen without recording it as a phone-task trace screenshot. */
+    suspend fun inspectScreen(): ScreenState = observe()
+
     /** Executes one non-terminal action (not [Action.AskUser] or [Action.Finish]). */
     suspend fun perform(action: Action): ActionResult
 
     suspend fun installedApps(): List<AppInfo>
+
+    /** Deep-link schemes registered by installed apps (`package -> schemes`); empty when the platform cannot tell. */
+    suspend fun appSchemes(): Map<String, List<String>> = emptyMap()
 }

@@ -136,7 +136,7 @@
     <string name="assist_guide_launch_body">If your phone supports it, set a long press of the power or side button to launch the assistant in system gesture settings. You can also try the system assistant gesture.</string>
     <string name="assist_guide_type_title">3. Type and send</string>
     <string name="assist_guide_type_body">The keyboard opens when you invoke Xiaoman. Type your message and tap the send arrow. Follow progress at the top of the screen, then read the reply in the notification or chat.</string>
-    <string name="settings_chat_description">Handles conversation and decides what to do next.</string>
+    <string name="settings_chat_description">Handles conversation and decides what to do next. A multimodal model with image input is required for chat pictures.</string>
     <string name="settings_operator_description">Reads the screen and performs actions. Requires image support.</string>
     <string name="model_none">The provider returned no models</string>
     <string name="model_timeout">Request timed out. Check your connection and try again.</string>
@@ -162,6 +162,12 @@
     <string name="example_preference_hint">Tell Xiaoman what you like</string>
     <string name="example_preference_prompt">Remember that I prefer simple, practical things.</string>
     <string name="chat_welcome_type">You can also type your own request</string>
+    <string name="chat_attach_image">Add image</string>
+    <string name="chat_remove_image">Remove image</string>
+    <string name="chat_image_selected">Image added</string>
+    <string name="chat_image_ready">Sent along with this message</string>
+    <string name="chat_image_default_prompt">Please describe this image.</string>
+    <string name="chat_image_read_failed">Could not read this image. Choose another one and try again.</string>
     <string name="chat_latest">Jump to latest</string>
     <string name="chat_process_count">Activity · %1$d</string>
     <string name="chat_process_hide">Hide activity</string>
@@ -191,7 +197,7 @@
     <string name="guide_notifications_open">Open notification settings</string>
     <string name="guide_models_title">Model setup</string>
     <string name="guide_models_detail">Connect the chat and phone control models</string>
-    <string name="guide_chat_model_body">Enter the API address and key from your provider. Tap Fetch models and choose a chat model. If no list is available, enter the model ID from your provider manually.</string>
+    <string name="guide_chat_model_body">Enter the API address and key from your provider. Fetch and choose a multimodal chat model that accepts image input. It handles normal conversation and the pictures you send in chat. If no list is available, enter the model ID from your provider manually.</string>
     <string name="guide_operator_model_body">If both models use the same provider, copy the chat model address and key, then choose a model that accepts images. Tap Save after configuring both models.</string>
     <string name="guide_automation_title">Task behavior</string>
     <string name="guide_automation_detail">Set a step limit and choose whether to save successful steps</string>

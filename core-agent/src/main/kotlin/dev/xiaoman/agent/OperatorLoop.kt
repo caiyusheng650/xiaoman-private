@@ -30,7 +30,7 @@ internal class OperatorLoop(
     private val sentinel: Sentinel,
     private val users: UserChannel,
     private val config: AgentConfig,
-    private val operatorNotes: (AgentLanguage) -> String = { config.operatorNotes },
+    private val operatorNotes: suspend (AgentLanguage) -> String = { config.operatorNotes },
 ) {
     /** Simple screenshot requests use the Android system route before visual planning. */
     suspend fun tryStandaloneScreenshot(task: TaskRun): LoopOutcome? {
@@ -165,7 +165,17 @@ internal class OperatorLoop(
                     }
                     val outcome = if (r.ok) r.message ?: "成功" else "失败：${r.message ?: "未知原因"}"
                     history += Prompts.stepLine(index, ScreenText.describe(action), outcome)
-                    if (!r.ok) feedback += "上一步执行失败：${r.message ?: "未知原因"}"
+                    if (r.openedAppFallback) {
+                        feedback += task.language.text(
+                            "链接未打开目标页面。应用已启动，请根据当前界面继续操作，并确认是否到达目标页面。",
+                            "The link did not open the target page. The app was launched. Continue using the visible controls and verify the destination.",
+                        )
+                    } else if (!r.ok) {
+                        feedback += task.language.text(
+                            "上一步执行失败：${r.message ?: "未知原因"}",
+                            "The last action failed: ${r.message ?: "unknown reason"}",
+                        )
+                    }
                     acted = true
                     actedOn = fp
                     if (constraint != null) {
@@ -264,7 +274,7 @@ internal class OperatorLoop(
         operator.complete(request)
     }
 
-    private fun operatorRequest(
+    private suspend fun operatorRequest(
         task: TaskRun,
         subGoal: String?,
         constraint: StepConstraint?,
@@ -277,6 +287,8 @@ internal class OperatorLoop(
             task.skill?.let { s -> s.instructions.takeIf { it.isNotBlank() }?.let { add(task.language.text(Prompts.skillSection(s.name, it), "## Instructions for ${s.name}\n$it")) } }
             if (task.references.isNotBlank()) add(task.language.text(Prompts.MEMORY_REFS_HEADER, "## Related material from memory") + "\n" + task.references)
             if (task.howto.isNotBlank()) add(task.language.text(Prompts.HOWTO_HEADER, "## Previously successful paths (reference only)") + "\n" + task.howto)
+            if (task.apps.isNotBlank()) add(task.language.text(Prompts.APPS_HEADER, "## Apps installed on this phone") + "\n" + task.language.text(Prompts.APPS_HINT, "Use these packages when opening an app; do not guess packages from other devices.") + "\n" + task.apps)
+            if (task.schemes.isNotBlank()) add(task.language.text(Prompts.SCHEMES_HEADER, "## URI schemes declared by apps") + "\n" + task.language.text(Prompts.SCHEMES_HINT, Prompts.SCHEMES_HINT_EN) + "\n" + task.schemes)
             if (history.isNotEmpty()) add(task.language.text(Prompts.HISTORY_HEADER, "## Recent steps") + "\n" + history.takeLast(config.historyWindow).joinToString("\n"))
             if (feedback.isNotEmpty()) add(task.language.text(Prompts.FEEDBACK_HEADER, "## Previous step feedback") + "\n" + feedback.joinToString("\n"))
             constraint?.let { add(Prompts.singleStep(it.kind, it.target, it.text, task.language)) }
