@@ -20,6 +20,7 @@ object AgentTools {
     const val REMINDER_SET = "reminder_set"
     const val PHONE_TASK = "phone_task"
     const val INSPECT_SCREEN = "inspect_screen"
+    const val HTTP_REQUEST = "http_request"
 
     /** Tools only offered when a writable [dev.xiaoman.api.SkillStore] is available. */
     val SKILL_TOOL_NAMES = setOf(SKILL_WRITE, SKILL_DELETE)
@@ -102,6 +103,17 @@ object AgentTools {
             INSPECT_SCREEN, "只读查看当前手机屏幕（截图与无障碍文字），不点击、不操作、不保存截图。用户问‘这是什么’、‘屏幕上有什么’等指当前屏幕的问题时使用。",
             schema(emptyList()),
         ),
+        ToolSpec(
+            HTTP_REQUEST,
+            "发起一次 HTTP/HTTPS 请求并返回状态码、响应体和响应头。可指定请求方法、请求头和 JSON 请求体；响应体过长会被截断。",
+            schema(
+                listOf("url"),
+                "method" to methodEnum(),
+                "url" to str("完整的 http/https 请求地址"),
+                "headers" to obj("可选，请求头，名称到字符串值的映射，如 Authorization、Content-Type"),
+                "body" to any("可选，JSON 请求体（对象、数组或字面量）；GET/HEAD 一般不用"),
+            ),
+        ),
     )
 
     private fun schema(required: List<String>, vararg props: Pair<String, JsonObject>): JsonObject = buildJsonObject {
@@ -114,5 +126,13 @@ object AgentTools {
     private fun int(description: String) = buildJsonObject { put("type", "integer"); put("description", description) }
     private fun arr(description: String, items: JsonObject) = buildJsonObject {
         put("type", "array"); put("description", description); put("items", items)
+    }
+    private fun obj(description: String) = buildJsonObject { put("type", "object"); put("description", description) }
+    private fun any(description: String) = buildJsonObject { put("description", description) }
+
+    private fun methodEnum(): JsonObject = buildJsonObject {
+        put("type", "string")
+        put("description", "请求方法，默认 GET")
+        putJsonArray("enum") { listOf("GET", "POST", "PUT", "PATCH", "DELETE").forEach { add(it) } }
     }
 }

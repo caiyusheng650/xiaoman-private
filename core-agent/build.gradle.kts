@@ -7,6 +7,8 @@ kotlin { jvmToolchain(17) }
 
 dependencies {
     api(project(":core-api"))
+    implementation(libs.okhttp)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
 }

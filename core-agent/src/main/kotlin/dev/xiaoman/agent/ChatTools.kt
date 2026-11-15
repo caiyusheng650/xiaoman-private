@@ -41,6 +41,7 @@ internal class ChatTools(
     private val confirmSkill: (suspend (prompt: String) -> Boolean)? = null,
     private val language: AgentLanguage = AgentLanguage.CHINESE,
     private val inspectScreen: (suspend () -> String)? = null,
+    private val http: HttpRequestExecutor = HttpRequestExecutor(HttpRequestExecutor.shared),
 ) {
     suspend fun execute(call: ToolCall, taskId: String, emit: (AgentEvent) -> Unit): String = try {
         val args = parseArgs(call.argumentsJson)
@@ -55,6 +56,7 @@ internal class ChatTools(
             AgentTools.REMINDER_SET -> reminder(args)
             AgentTools.PHONE_TASK -> if (phoneTasks) phone(args) else error("这里不能操作手机，请用其他工具或告诉用户自己操作")
             AgentTools.INSPECT_SCREEN -> inspectScreen?.invoke() ?: error("当前环境无法读取手机屏幕")
+            AgentTools.HTTP_REQUEST -> httpRequest(args)
             else -> external(call, taskId, emit)
         }
     } catch (e: CancellationException) {
@@ -257,4 +259,6 @@ internal class ChatTools(
             put("steps", finished.steps)
         }.toString()
     }
+
+    private suspend fun httpRequest(args: JsonObject): String = http.execute(args)
 }
