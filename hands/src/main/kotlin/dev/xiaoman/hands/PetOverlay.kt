@@ -101,17 +101,23 @@ class PetOverlay(private val context: Context) {
             title = "Xiaoman pet"
             setFitInsetsTypes(0)
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            // Absolute top-start coordinates only. With a bottom-end window, x/y meant "distance from
+            // the right/bottom edge", while the drag handler writes screen pixels into them - the very
+            // first drag then flew to a corner and persisted 0,0.
+            gravity = Gravity.TOP or Gravity.START
+            val metrics = wm.currentWindowMetrics
+            val maxX = (metrics.bounds.width() - frame).coerceAtLeast(0)
+            val maxY = (metrics.bounds.height() - frame).coerceAtLeast(0)
             if (xDp != null && yDp != null) {
-                gravity = Gravity.TOP or Gravity.START
-                x = (xDp * density).toInt()
-                y = (yDp * density).toInt()
+                // A saved spot can fall outside the screen after a rotation or a resolution change.
+                x = (xDp * density).toInt().coerceIn(0, maxX)
+                y = (yDp * density).toInt().coerceIn(0, maxY)
             } else {
-                gravity = Gravity.BOTTOM or Gravity.END
-                val bars = wm.currentWindowMetrics.windowInsets
+                val bars = metrics.windowInsets
                     .getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars() or WindowInsets.Type.displayCutout())
                     .bottom
-                x = dp(16)
-                y = bars + dp(16)
+                x = (maxX - dp(16)).coerceIn(0, maxX)
+                y = (maxY - bars - dp(16)).coerceIn(0, maxY)
             }
         }
         attachGesture(view, lp, density)

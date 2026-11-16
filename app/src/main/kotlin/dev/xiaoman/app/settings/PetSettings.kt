@@ -52,16 +52,21 @@ class PetSettings(context: Context) {
         prefs.edit {
             putFloat(POS_X, xDp)
             putFloat(POS_Y, yDp)
+            putBoolean(POS_VALID, true)
         }
         _position.value = PetPosition(xDp, yDp)
     }
 
     fun clearPosition() {
-        prefs.edit { remove(POS_X); remove(POS_Y) }
+        prefs.edit { remove(POS_X); remove(POS_Y); remove(POS_VALID) }
         _position.value = PetPosition(-1f, -1f)
     }
 
     private fun loadPosition(): PetPosition {
+        // Positions written before the window moved to absolute coordinates were garbage: they were
+        // offsets from the corner, and the first drag that hit that bug stored 0,0, which parked the
+        // pet in the top-left. Only a position written with the flag is trusted.
+        if (!prefs.getBoolean(POS_VALID, false)) return PetPosition(-1f, -1f)
         val x = prefs.getFloat(POS_X, -1f)
         val y = prefs.getFloat(POS_Y, -1f)
         return PetPosition(x, y)
@@ -73,5 +78,6 @@ class PetSettings(context: Context) {
         private const val SHEET_VERSION = "sheetVersion"
         private const val POS_X = "posX"
         private const val POS_Y = "posY"
+        private const val POS_VALID = "posValid"
     }
 }
