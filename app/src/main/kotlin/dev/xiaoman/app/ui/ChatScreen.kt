@@ -183,7 +183,7 @@ fun ChatScreen(
                 ) {
                     if (working) {
                         item(key = "working") {
-                            TaskStatus(status ?: stringResource(R.string.chat_working))
+                            TaskStatus(status ?: stringResource(R.string.chat_working), graph.petSettings)
                         }
                     }
                     items(rows.asReversed(), key = { it.id }) { row ->

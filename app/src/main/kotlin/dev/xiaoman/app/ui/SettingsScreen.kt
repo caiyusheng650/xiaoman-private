@@ -1,6 +1,9 @@
 package dev.xiaoman.app.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -31,6 +34,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,9 +43,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.xiaoman.app.settings.AppLanguage
+import dev.xiaoman.app.settings.PetSettings
 import dev.xiaoman.app.settings.ThemeMode
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -50,11 +56,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import java.io.FileNotFoundException
 import dev.xiaoman.app.AppGraph
 import dev.xiaoman.app.R
 import dev.xiaoman.app.settings.SettingsForm
+import dev.xiaoman.hands.PetSpriteSheet
 import dev.xiaoman.llm.ModelCatalog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
 import java.net.SocketTimeoutException
 
@@ -114,7 +125,6 @@ fun SettingsScreen(graph: AppGraph) {
             ) {
             SetupGuideEntry { openGuide() }
             AppearanceCard(graph)
-            AssistantSettingsCard(onGuide = { openGuide(SetupTopic.ASSISTANT) })
 
             SettingsCard(
                 title = stringResource(R.string.settings_chat_model),
@@ -157,6 +167,9 @@ fun SettingsScreen(graph: AppGraph) {
                     })
                 }
             }
+
+            AssistantSettingsCard(onGuide = { openGuide(SetupTopic.ASSISTANT) })
+            PetCard(graph, onGuide = { openGuide(SetupTopic.PET) })
 
             SettingsCard(
                 title = stringResource(R.string.settings_folders),
@@ -385,6 +398,135 @@ private fun <T> PreferenceMenu(label: String, selected: T, choices: Map<T, Strin
                     onSelect(value)
                 })
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PetCard(graph: AppGraph, onGuide: () -> Unit) {
+    val context = LocalContext.current
+    val petSettings = graph.petSettings
+    val enabled by petSettings.enabled.collectAsStateWithLifecycle()
+    val customPath by petSettings.customPath.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var previewBmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var uploading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun refreshPreview() {
+        scope.launch {
+            val bmp = withContext(Dispatchers.IO) {
+                val sheet = customPath?.let { PetSpriteSheet.fromFile(File(it)) }
+                    ?: PetSpriteSheet.default(context)
+                sheet?.use { it.frame(row = 0, col = 0) }
+            }
+            previewBmp = bmp
+        }
+    }
+
+    LaunchedEffect(customPath) { refreshPreview() }
+
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            uploading = true
+            error = null
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    val target = File(context.filesDir, "pet_sheet.png")
+                    // Decode into a scratch file first: replacing the live sheet before it is known to
+                    // be valid would leave the user with no pet at all if the pick was a screenshot.
+                    val scratch = File(context.filesDir, "pet_sheet.tmp.png")
+                    try {
+                        context.contentResolver.openInputStream(uri).use { src ->
+                            if (src == null) throw FileNotFoundException(uri.toString())
+                            scratch.outputStream().use { dst -> src.copyTo(dst) }
+                        }
+                        if (PetSpriteSheet.fromFile(scratch) == null) {
+                            null
+                        } else {
+                            if (!scratch.renameTo(target)) {
+                                scratch.copyTo(target, overwrite = true)
+                            }
+                            target
+                        }
+                    } finally {
+                        runCatching { scratch.delete() }
+                    }
+                }
+                if (file != null) petSettings.setCustomSheet(file) else error = context.getString(R.string.pet_upload_invalid)
+            } catch (t: Exception) {
+                // The picker can list entries whose bytes are gone: deleted after being indexed,
+                // cloud-only, or a stale row. Providers report that as a plain open failure, and
+                // its raw message means nothing to a user.
+                val raw = t.message.orEmpty()
+                val missing = t is FileNotFoundException || raw.contains("ENOENT") || raw.contains("No such file")
+                error = context.getString(if (missing) R.string.pet_upload_missing else R.string.pet_upload_failed)
+            } finally {
+                uploading = false
+            }
+        }
+    }
+
+    SettingsCard(
+        title = stringResource(R.string.pet_settings_title),
+        description = stringResource(R.string.pet_settings_description),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.pet_enable), modifier = Modifier.weight(1f))
+            Switch(checked = enabled, onCheckedChange = petSettings::setEnabled)
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            previewBmp?.let { bmp ->
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(Space.xs), modifier = Modifier.weight(1f)) {
+                if (customPath != null) {
+                    Text(
+                        stringResource(R.string.pet_custom_active),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.pet_default_active),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+            verticalArrangement = Arrangement.spacedBy(Space.xs),
+        ) {
+            OutlinedButton(enabled = !uploading, onClick = { pick.launch("image/png") }) {
+                if (uploading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                val label = if (uploading) R.string.pet_uploading else R.string.pet_upload
+                val pad = if (uploading) Modifier.padding(start = 8.dp) else Modifier
+                Text(stringResource(label), pad)
+            }
+            OutlinedButton(enabled = customPath != null && !uploading, onClick = { petSettings.setCustomSheet(null) }) {
+                Text(stringResource(R.string.pet_reset_default))
+            }
+            TextButton(onClick = onGuide) { Text(stringResource(R.string.pet_view_guide)) }
+        }
+        error?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
     }
 }

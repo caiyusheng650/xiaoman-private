@@ -38,7 +38,18 @@ import dev.xiaoman.app.R
 import dev.xiaoman.app.session.ChatItem
 import dev.xiaoman.app.session.localizedText
 import dev.xiaoman.app.session.PendingQuestion
+import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import dev.xiaoman.app.settings.PetSettings
+import dev.xiaoman.hands.PetSpriteSheet
+import dev.xiaoman.hands.PetState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -131,7 +142,7 @@ private fun Example(icon: ImageVector, title: String, detail: String, prompt: St
 }
 
 @Composable
-internal fun TaskStatus(status: String) {
+internal fun TaskStatus(status: String, pet: PetSettings) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -142,7 +153,7 @@ internal fun TaskStatus(status: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Space.sm),
         ) {
-            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
+            PetWorkingIndicator(pet)
             Text(
                 status,
                 style = MaterialTheme.typography.labelMedium,
@@ -150,6 +161,60 @@ internal fun TaskStatus(status: String) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+    }
+}
+
+/**
+ * The pet runs in place of the spinner while a round is in flight, so waiting feels in character.
+ * Falls back to the plain spinner when no sheet can be read.
+ */
+@Composable
+private fun PetWorkingIndicator(pet: PetSettings) {
+    val context = LocalContext.current
+    val enabled by pet.enabled.collectAsState()
+    val customPath by pet.customPath.collectAsState()
+    var frames by remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
+    LaunchedEffect(enabled, customPath) {
+        // The pill mirrors the desktop pet: with the pet switched off there is nothing to mirror,
+        // so it stays a plain spinner and never decodes a sheet.
+        frames = if (!enabled) emptyList() else withContext(Dispatchers.IO) { loadWorkingFrames(context, customPath) }
+    }
+    val current = frames
+    if (current.isEmpty()) {
+        CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
+        return
+    }
+    var index by remember(current) { mutableIntStateOf(0) }
+    LaunchedEffect(current) {
+        while (true) {
+            delay(160)
+            index = (index + 1) % current.size
+        }
+    }
+    Image(
+        current[index % current.size],
+        contentDescription = null,
+        modifier = Modifier.size(20.dp),
+        contentScale = ContentScale.Fit,
+    )
+}
+
+/** Reads the working row and shrinks each frame to display size, so a whole sheet never stays in memory. */
+private fun loadWorkingFrames(context: Context, customPath: String?): List<ImageBitmap> {
+    val sheet = customPath?.let { PetSpriteSheet.fromFile(File(it)) } ?: PetSpriteSheet.default(context)
+    if (sheet == null || !sheet.isUsable()) return emptyList()
+    return sheet.use { source ->
+        // Same row order as the desktop pet; sheets without a working row fall back down the chain.
+        val row = intArrayOf(PetState.WORKING.row, PetState.WORKING.fallbackRow, PetState.IDLE.row)
+            .firstOrNull { source.frameCount(it) > 0 } ?: PetState.IDLE.row
+        (0 until source.frameCount(row)).mapNotNull { col ->
+            val raw = source.frame(row, col) ?: return@mapNotNull null
+            val height = 72
+            val width = (raw.width.toFloat() * height / raw.height).toInt().coerceAtLeast(1)
+            val scaled = Bitmap.createScaledBitmap(raw, width, height, false)
+            if (scaled !== raw) raw.recycle()
+            scaled.asImageBitmap()
         }
     }
 }

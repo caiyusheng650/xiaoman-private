@@ -111,6 +111,10 @@ class AgentSession(
     /** Short text of the current step for the overlay and the notification. */
     val status: StateFlow<String?> = _status.asStateFlow()
 
+    /** Last phone-task outcome: null while idle/running, true on success, false on failure. */
+    private val _lastOutcome = MutableStateFlow<Boolean?>(null)
+    val lastOutcome: StateFlow<Boolean?> = _lastOutcome.asStateFlow()
+
     private val _question = MutableStateFlow<PendingQuestion?>(null)
     val question: StateFlow<PendingQuestion?> = _question.asStateFlow()
 
@@ -275,6 +279,7 @@ class AgentSession(
         stopSignal.reset()
         if (runId != null) synchronized(openRuns) { openRuns += runId }
         _status.value = null
+        _lastOutcome.value = null
         _busy.value = true
         scope.launch {
             var failure: String? = null
@@ -303,6 +308,7 @@ class AgentSession(
                         _busy.value = false
                         failure ?: finalReply ?: taskResult
                     }
+                    _lastOutcome.value = failure == null
                     if (!stopSignal.stopped && !result.isNullOrBlank()) onResult(result)
                 }
             }

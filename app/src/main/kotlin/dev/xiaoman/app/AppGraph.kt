@@ -11,6 +11,7 @@ import dev.xiaoman.app.session.ChatHistoryStore
 import dev.xiaoman.app.session.SessionTexts
 import dev.xiaoman.app.settings.AppearanceSettings
 import dev.xiaoman.app.settings.AppSettings
+import dev.xiaoman.app.settings.PetSettings
 import dev.xiaoman.app.settings.SettingsStore
 import dev.xiaoman.app.trace.RecordingDevice
 import dev.xiaoman.app.trace.TraceWriter
@@ -65,6 +66,7 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
     val mcpFile = File(externalRoot, "mcp.json")
 
     val appearance = AppearanceSettings(app)
+    val petSettings = PetSettings(app)
     val settings: SettingsStore by lazy { SettingsStore.create(app) }
 
     val memory by lazy { FileMemoryStore(memoryDir) }
@@ -219,7 +221,7 @@ class AppGraph(context: Context, private val llm: LlmClientFactory = LlmClients.
         scope.launch(Dispatchers.Main.immediate) {
             conversationVisible.collect { if (it) notifier.dismissResult() }
         }
-        OverlayController(session, accessibilityDevice, conversationVisible, appearance).start(scope)
+        OverlayController(session, accessibilityDevice, conversationVisible, appearance, petSettings).start(scope)
         scope.launch(Dispatchers.Main.immediate) {
             session.busy.collect { busy -> if (busy) AgentService.start(app) }
         }

@@ -33,6 +33,7 @@ internal enum class SetupTopic(@StringRes val title: Int, @StringRes val detail:
     NOTIFICATIONS(R.string.guide_notifications_title, R.string.guide_notifications_detail),
     MODELS(R.string.guide_models_title, R.string.guide_models_detail),
     AUTOMATION(R.string.guide_automation_title, R.string.guide_automation_detail),
+    PET(R.string.pet_settings_title, R.string.guide_pet_detail),
 }
 
 @Composable
@@ -138,6 +139,11 @@ private fun TopicInstructions(topic: SetupTopic) {
             SetupTopic.AUTOMATION -> {
                 GuideStep(R.string.settings_max_steps, R.string.guide_steps_body)
                 GuideStep(R.string.settings_learn, R.string.guide_learn_body)
+            }
+            SetupTopic.PET -> {
+                GuideStep(R.string.pet_guide_what_title, R.string.pet_guide_what_body)
+                GuideStep(R.string.pet_guide_get_title, R.string.pet_guide_get_body)
+                GuideStep(R.string.pet_guide_upload_title, R.string.pet_guide_upload_body)
             }
         }
     }
