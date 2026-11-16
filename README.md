@@ -2,6 +2,8 @@
 
 [English](README.en.md)
 
+> 本项目克隆自 [aduoge/xiaoman](https://github.com/aduoge/xiaoman)，并在此基础上继续修改，来源说明见文末「来源与致谢」。
+
 小满是一个跑在 Android 手机上的开源私人助手。你在它的 App 里聊天，它会记住你告诉它的事，
 也能替你操作手机上的其他 App，比如打车、点外卖、改系统设置。新场景以**技能**的形式添加：一个技能
 就是一个包含 `SKILL.md` 和可选 `flow.yaml` 的小文件夹，推到手机上即可生效，不需要重新打包 APK。
@@ -103,6 +105,18 @@ xiaoman/
 记忆是 Basic Memory 格式的 Markdown 文件，存放在
 `/sdcard/Android/data/dev.xiaoman.app/files/memory/`，可以直接拷进 Obsidian 查看和编辑。
 「忘记」会直接删除对应文件。
+
+## 来源与致谢
+
+本仓库的起点是 [aduoge/xiaoman](https://github.com/aduoge/xiaoman)：整体架构、`core-*` 模块、技能与
+MCP 机制、Android 无障碍层都来自该项目，本仓库在此基础上继续修改（例如 Android 端的界面调整、
+桌面宠物、内置 `http_request` 工具、模板与文档补充）。
+
+- 原始设计与绝大部分代码的著作权属于原作者，按原项目的 MIT 许可证使用，见 [LICENSE](LICENSE)。
+- 架构、技能格式、MCP 等机制的说明，仍以原项目的文档为准；本仓库新增或改动的行为，以本仓库的
+  代码和文档为准。
+- 如果你要从头搭建一个自己的助手，建议直接查看原项目；本仓库更适合作为「已经在用、想继续改」的分支。
+- 上游地址：`https://github.com/aduoge/xiaoman`（`git remote add upstream git@github.com:aduoge/xiaoman.git`）。
 
 ## 许可证
 

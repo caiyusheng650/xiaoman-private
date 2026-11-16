@@ -2,6 +2,8 @@
 
 [中文](README.md)
 
+> This repository started as a clone of [aduoge/xiaoman](https://github.com/aduoge/xiaoman) and continues to be modified here; see the attribution section at the end.
+
 An open-source personal agent that lives on an Android phone. You chat with it in its app; it
 remembers what you tell it and operates the other apps on the phone for you (打车、点外卖、改设置 ...).
 New scenarios are **skills**: small `SKILL.md` + `flow.yaml` folders you can push without rebuilding
@@ -66,6 +68,21 @@ LLM client, memory, skills, sentinel, agent), `hands` is the accessibility layer
 Notes are Markdown files in the Basic Memory format under
 `/sdcard/Android/data/dev.xiaoman.app/files/memory/`, so you can read and edit them in Obsidian.
 Forgetting deletes the file.
+
+## Origin and attribution
+
+This repository started as a clone of [aduoge/xiaoman](https://github.com/aduoge/xiaoman). The overall
+architecture, the `core-*` modules, the skill and MCP machinery, and the Android accessibility layer all
+come from that project; this fork keeps building on top of it (Android UI changes, the desktop pet, the
+built-in `http_request` tool, plus template and documentation additions).
+
+- Copyright for the original design and most of the code belongs to the original author, used under the
+  same MIT licence, see [LICENSE](LICENSE).
+- For architecture, skill format and MCP docs, the upstream project remains the reference. Behaviour added
+  or changed here is described by this repository's code and docs.
+- Starting from scratch? Look at the upstream project first. This fork is better suited to "I already use
+  it and want to keep changing it".
+- Upstream: `https://github.com/aduoge/xiaoman` (`git remote add upstream git@github.com:aduoge/xiaoman.git`).
 
 ## License
 
