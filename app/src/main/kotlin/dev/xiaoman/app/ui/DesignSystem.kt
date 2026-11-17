@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -68,6 +69,8 @@ object Dimens {
     val cardShape = 16.dp
     /** Reading column on tablets: content never stretches edge to edge on a wide screen. */
     val maxContentWidth = 640.dp
+    /** Height reserved for a header action button; keeps every tab header the same height. */
+    val headerActionHeight = 40.dp
     /** Chat bubbles stay readable on large screens even though they may fill a phone. */
     val maxBubbleWidth = 560.dp
 }
@@ -104,7 +107,12 @@ fun ScreenHeader(
                 )
             }
         }
-        action?.invoke()
+        // The slot is laid out even when a page has nothing to put there. Without it, a page whose
+        // action is a bare spinner (or nothing) draws a shorter header than a page with a text
+        // button, so its title sits higher and its body starts higher than on the other tabs.
+        Box(Modifier.height(Dimens.headerActionHeight), contentAlignment = Alignment.Center) {
+            action?.invoke()
+        }
     }
 }
 
