@@ -83,10 +83,9 @@ fun McpScreen(graph: AppGraph) {
     }
 
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        ScreenHeader(
-            title = stringResource(R.string.nav_services),
-            subtitle = stringResource(R.string.mcp_intro),
-        )
+        // No subtitle: the confirmation policy it explained is now spelled out by the per-service
+        // switch below, and a fixed header keeps the list from moving when the page opens.
+        ScreenHeader(title = stringResource(R.string.nav_services))
         LazyColumn(
             Modifier.weight(1f).pageWidth(),
             contentPadding = pageContentPadding,

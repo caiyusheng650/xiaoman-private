@@ -117,7 +117,6 @@
 
     <!-- MCP services -->
     <string name="mcp_title">外部服务</string>
-    <string name="mcp_intro">勾选后，小满可以直接调用这些服务查询或办事，不用操作手机。会修改数据或产生费用的操作，会先在聊天里问你。</string>
     <string name="mcp_enabled_count">已启用 %1$d 个</string>
     <string name="mcp_recommended">推荐组合</string>
     <string name="mcp_test">测试连接</string>
@@ -193,12 +192,21 @@
     <string name="chat_takeover_card">需要你帮一下</string>
     <string name="chat_question_card">再告诉我一点</string>
     <string name="chat_failed_card">这次没完成</string>
-    <string name="skills_loading">正在加载…</string>
-    <string name="skills_loaded">已加载 %1$d 个</string>
     <string name="skills_builtin">内置</string>
     <string name="skills_local">本地</string>
-    <string name="memory_count">%1$d 条</string>
-    <string name="memory_loading">读取中…</string>
+    <string name="skills_delete">删除</string>
+    <string name="skills_delete_title">删除这个技能？</string>
+    <string name="skills_delete_message">「%1$s」的文件夹会从小满的技能目录里删除。</string>
+    <string name="skills_delete_confirm">删除</string>
+    <string name="skills_delete_failed">删除失败，可能正在被别的页面使用，稍后再试。</string>
+    <string name="skills_detail_source">来源</string>
+    <string name="skills_detail_description">作用</string>
+    <string name="skills_detail_folder">目录</string>
+    <string name="skills_detail_confirm">需要确认</string>
+    <string name="skills_detail_memory">会用到的记忆</string>
+    <string name="skills_detail_flow">固定步骤</string>
+    <string name="skills_detail_flow_steps">%1$d 步</string>
+    <string name="skills_apps_label">会用到</string>
     <string name="approval_more">更多选项</string>
     <string name="approval_task_similar">本次任务的同类操作都允许</string>
     <string name="guide_title">设置指南</string>

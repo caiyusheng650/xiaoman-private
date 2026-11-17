@@ -37,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -147,14 +148,15 @@ fun MemoryScreen(graph: AppGraph) {
 private fun MemoryList(state: MemoryState, vm: MemoryViewModel) {
     LaunchedEffect(Unit) { vm.refresh() }
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        // The subtitle keeps exactly one line at all times. It used to appear only once the list
-        // finished loading, which shoved the search field and the whole list down on page open.
+        // No subtitle: it used to resize the header once the list arrived and shifted everything
+        // below it. Loading now shows as a small spinner in the action slot, which the title row
+        // already has room for, so the page keeps one layout from first frame to last.
         ScreenHeader(
             title = stringResource(R.string.nav_memory),
-            subtitle = if (state.loading) {
-                stringResource(R.string.memory_loading)
-            } else {
-                stringResource(R.string.memory_count, state.rows.size)
+            action = {
+                if (state.loading) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                }
             },
         )
         Column(Modifier.pageWidth().padding(horizontal = Dimens.pageHorizontal)) {
