@@ -180,6 +180,7 @@
     <string name="skills_builtin">Built in</string>
     <string name="skills_local">Local</string>
     <string name="memory_count">%1$d notes</string>
+    <string name="memory_loading">Reading…</string>
     <string name="approval_more">More options</string>
     <string name="approval_task_similar">Allow similar actions for this task</string>
     <string name="guide_title">Setup guide</string>

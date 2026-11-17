@@ -198,6 +198,7 @@
     <string name="skills_builtin">内置</string>
     <string name="skills_local">本地</string>
     <string name="memory_count">%1$d 条</string>
+    <string name="memory_loading">读取中…</string>
     <string name="approval_more">更多选项</string>
     <string name="approval_task_similar">本次任务的同类操作都允许</string>
     <string name="guide_title">设置指南</string>

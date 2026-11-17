@@ -32,7 +32,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -148,9 +147,15 @@ fun MemoryScreen(graph: AppGraph) {
 private fun MemoryList(state: MemoryState, vm: MemoryViewModel) {
     LaunchedEffect(Unit) { vm.refresh() }
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        // The subtitle keeps exactly one line at all times. It used to appear only once the list
+        // finished loading, which shoved the search field and the whole list down on page open.
         ScreenHeader(
             title = stringResource(R.string.nav_memory),
-            subtitle = if (!state.loading && state.rows.isNotEmpty()) stringResource(R.string.memory_count, state.rows.size) else null,
+            subtitle = if (state.loading) {
+                stringResource(R.string.memory_loading)
+            } else {
+                stringResource(R.string.memory_count, state.rows.size)
+            },
         )
         Column(Modifier.pageWidth().padding(horizontal = Dimens.pageHorizontal)) {
             OutlinedTextField(
@@ -171,7 +176,6 @@ private fun MemoryList(state: MemoryState, vm: MemoryViewModel) {
                 textStyle = MaterialTheme.typography.bodyMedium,
             )
         }
-        if (state.loading) LinearProgressIndicator(Modifier.pageWidth().padding(top = Space.sm))
         if (state.openMissing) {
             Text(stringResource(R.string.memory_not_found), modifier = Modifier.padding(Dimens.pageHorizontal), color = MaterialTheme.colorScheme.error)
         }
