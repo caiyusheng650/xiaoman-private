@@ -58,7 +58,8 @@ internal class StepText(private val resources: Resources) {
         is AgentEvent.StepBlocked -> ChatItem.Progress(
             id, text(R.string.agent_log_step_blocked, event.stepIndex + 1, action(event.action), event.decision.reason), false,
         )
-        is AgentEvent.NeedsUser -> ChatItem.Question(id, event.question, event.takeover)
+        // The question row is persisted by UserChannel.ask(); the event only drives status/overlay.
+        is AgentEvent.NeedsUser -> null
         is AgentEvent.MemoryUpdated -> ChatItem.Progress(id, text(R.string.agent_log_memory, event.permalink))
         is AgentEvent.SkillUpdated -> ChatItem.Progress(
             id,
