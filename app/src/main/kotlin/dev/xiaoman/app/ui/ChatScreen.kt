@@ -52,6 +52,7 @@ import dev.xiaoman.app.AppGraph
 import dev.xiaoman.app.R
 import dev.xiaoman.app.session.AgentSession
 import dev.xiaoman.app.session.ChatImages
+import dev.xiaoman.app.session.ChatItem
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -83,7 +84,6 @@ fun ChatScreen(
     var draft by rememberSaveable { mutableStateOf("") }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     val zone = ZoneId.systemDefault()
-    val rows = remember(items, zone) { chatTimeline(items, zone) }
     val listState = rememberLazyListState()
     val nearBottom = with(LocalDensity.current) { 72.dp.roundToPx() }
     var followLatest by remember { mutableStateOf(true) }
@@ -99,6 +99,14 @@ fun ChatScreen(
 
     val pendingApproval = approval
     val pendingQuestion = question
+    // While a prompt is pending, its pinned card carries the message; hide the matching
+    // transcript row so it isn't rendered twice. It returns to history once answered.
+    val pendingText = pendingApproval?.request?.prompt ?: pendingQuestion?.question
+    val visibleItems = remember(items, pendingText) {
+        if (pendingText == null) items
+        else items.filterNot { it is ChatItem.Question && it.text == pendingText }
+    }
+    val rows = remember(visibleItems, zone) { chatTimeline(visibleItems, zone) }
     val working = busy && pendingQuestion == null && pendingApproval == null
     val latestItemId = items.lastOrNull()?.id
     LaunchedEffect(latestItemId, working, pendingQuestion?.id, pendingApproval?.id) {

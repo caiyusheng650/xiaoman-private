@@ -236,7 +236,8 @@ class AgentSession(
     override suspend fun ask(taskId: String, question: String, takeover: Boolean, options: List<String>): String {
         val pending = PendingQuestion(ids.incrementAndGet(), taskId, question, takeover, options)
         if (stopSignal.stopped) return texts().stopped
-        if (options.isNotEmpty()) add(ChatItem.Question(ids.incrementAndGet(), question, takeover))
+        // The transcript keeps one question row; the pinned question card is the action UI.
+        add(ChatItem.Question(ids.incrementAndGet(), question, takeover))
         _question.value = pending
         try {
             return pending.answer.await()
@@ -249,7 +250,7 @@ class AgentSession(
         if (stopSignal.stopped) return ApprovalAnswer(approved = false)
         val pending = PendingApproval(ids.incrementAndGet(), request)
         val before = _status.value
-        add(ChatItem.Question(ids.incrementAndGet(), request.prompt, takeover = false))
+        // The approval card is the action UI; the resolved progress line records the outcome.
         _approval.value = pending
         _status.value = StepText(resources()).approval(request.prompt)
         try {
