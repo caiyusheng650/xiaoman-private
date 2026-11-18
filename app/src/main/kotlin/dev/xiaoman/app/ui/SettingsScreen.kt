@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -409,6 +410,8 @@ private fun PetCard(graph: AppGraph, onGuide: () -> Unit) {
     val petSettings = graph.petSettings
     val enabled by petSettings.enabled.collectAsStateWithLifecycle()
     val customPath by petSettings.customPath.collectAsStateWithLifecycle()
+    val bundle by petSettings.bundle.collectAsStateWithLifecycle()
+    val sizeScale by petSettings.sizeScale.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var previewBmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var uploading by remember { mutableStateOf(false) }
@@ -418,14 +421,14 @@ private fun PetCard(graph: AppGraph, onGuide: () -> Unit) {
         scope.launch {
             val bmp = withContext(Dispatchers.IO) {
                 val sheet = customPath?.let { PetSpriteSheet.fromFile(File(it)) }
-                    ?: PetSpriteSheet.default(context)
+                    ?: PetSpriteSheet.default(context, bundle)
                 sheet?.use { it.frame(row = 0, col = 0) }
             }
             previewBmp = bmp
         }
     }
 
-    LaunchedEffect(customPath) { refreshPreview() }
+    LaunchedEffect(customPath, bundle) { refreshPreview() }
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -494,21 +497,51 @@ private fun PetCard(graph: AppGraph, onGuide: () -> Unit) {
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(Space.xs), modifier = Modifier.weight(1f)) {
-                if (customPath != null) {
-                    Text(
-                        stringResource(R.string.pet_custom_active),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Text(
-                        stringResource(R.string.pet_default_active),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                val activeLabel = when {
+                    customPath != null -> R.string.pet_active_custom
+                    bundle == PetSettings.BUNDLE_CLASSIC -> R.string.pet_active_default2
+                    else -> R.string.pet_active_default1
                 }
+                Text(
+                    stringResource(activeLabel),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Space.sm),
+            verticalArrangement = Arrangement.spacedBy(Space.xs),
+        ) {
+            BuiltInPackButton(
+                selected = customPath == null && bundle == PetSettings.BUNDLE_DEFAULT,
+                label = R.string.pet_bundle_default,
+                onClick = { petSettings.setBundle(PetSettings.BUNDLE_DEFAULT) },
+            )
+            BuiltInPackButton(
+                selected = customPath == null && bundle == PetSettings.BUNDLE_CLASSIC,
+                label = R.string.pet_bundle_classic,
+                onClick = { petSettings.setBundle(PetSettings.BUNDLE_CLASSIC) },
+            )
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.pet_size_title), modifier = Modifier.weight(1f))
+            Text(
+                "${(sizeScale * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Slider(
+            value = sizeScale,
+            onValueChange = { petSettings.setSizeScale(it) },
+            valueRange = PetSettings.MIN_SCALE..PetSettings.MAX_SCALE,
+            steps = 6,
+        )
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Space.sm),
@@ -528,5 +561,15 @@ private fun PetCard(graph: AppGraph, onGuide: () -> Unit) {
         error?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
+    }
+}
+
+@Composable
+private fun BuiltInPackButton(selected: Boolean, label: Int, onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick) {
+        Text(
+            text = (if (selected) "● " else "○ ") + stringResource(label),
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

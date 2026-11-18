@@ -28,6 +28,18 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".assist.AssistantActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Xiaoman.Assistant">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".assist.XiaomanVoiceService"
             android:exported="true"
@@ -43,7 +55,8 @@
             android:permission="android.permission.BIND_VOICE_INTERACTION" />
         <service
             android:name=".assist.XiaomanRecognitionService"
-            android:exported="false">
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
             <intent-filter>
                 <action android:name="android.speech.RecognitionService" />
             </intent-filter>

@@ -1,6 +1,7 @@
 package dev.xiaoman.app
 
 import android.content.Intent
+import dev.xiaoman.app.assist.AssistantActivity
 import dev.xiaoman.app.session.AgentSession
 import dev.xiaoman.app.settings.AppLanguage
 import dev.xiaoman.app.settings.AppearanceSettings
@@ -47,6 +48,8 @@ class OverlayController(
     private var petOwner: XiaomanAccessibilityService? = null
     private var petCustomPath: String? = null
     private var petSheetVersion = -1
+    private var petBundle: String? = null
+    private var petScale: Float = 1f
     private var fallbackLabel = ""
 
     fun start(scope: CoroutineScope): Job {
@@ -85,10 +88,16 @@ class OverlayController(
     private suspend fun managePet() {
         // The upload always lands on the same file, so the path alone cannot tell a re-upload apart;
         // the version counter is what tells the sheet to reload.
-        val petSheet = combine(petSettings.customPath, petSettings.sheetVersion) { path, version -> path to version }
+        val petSheet = combine(
+            petSettings.customPath, petSettings.sheetVersion, petSettings.bundle, petSettings.sizeScale,
+        ) { path, version, bundle, scale -> SheetPref(path, version, bundle, scale) }
         val petFlow = combine(services, petSettings.enabled, petSheet, petSettings.position, session.busy) {
                 service, enabled, sheet, pos, busy ->
-            PetInput(service?.takeIf { enabled }, sheet.first, sheet.second, pos, busy, null)
+            PetInput(
+                service?.takeIf { enabled },
+                sheet.customPath, sheet.version, sheet.bundle, sheet.sizeScale,
+                pos, busy, null,
+            )
         }
         combine(petFlow, session.lastOutcome) { input, outcome -> input.copy(outcome = outcome) }
             .collect { input ->
@@ -102,16 +111,24 @@ class OverlayController(
                     removePet()
                     val localized = appearance.localizedContext(service, appearance.language.value)
                     val fresh = PetOverlay(localized).also { p ->
-                        p.onClick = openChat(service)
+                        // A single tap does nothing: it must not bring the app forward while the
+                        // user is aiming for a double tap. Only the double tap opens the panel.
+                        p.onDoubleClick = openAssistant(service)
                         p.onRestAt = { x, y -> petSettings.setPosition(x, y) }
                     }
                     pet = fresh
                     petOwner = service
-                    loadSheet(fresh, localized, input.customPath, input.sheetVersion)
+                    petScale = input.sizeScale
+                    loadSheet(fresh, localized, input.customPath, input.sheetVersion, input.bundle)
+                    fresh.setScale(input.sizeScale)
                     fresh.show(input.position.xDp.takeIf { it >= 0 }, input.position.yDp.takeIf { it >= 0 })
                 } else {
                     pet?.let { current ->
-                        loadSheetIfChanged(current, service, input.customPath, input.sheetVersion)
+                        loadSheetIfChanged(current, service, input.customPath, input.sheetVersion, input.bundle)
+                        if (petScale != input.sizeScale) {
+                            current.setScale(input.sizeScale)
+                            petScale = input.sizeScale
+                        }
                         if (!current.isShowing) {
                             current.show(input.position.xDp.takeIf { it >= 0 }, input.position.yDp.takeIf { it >= 0 })
                         }
@@ -130,27 +147,56 @@ class OverlayController(
         else -> PetState.IDLE
     }
 
-    private suspend fun loadSheetIfChanged(pet: PetOverlay, context: android.content.Context, customPath: String?, version: Int) {
-        if (customPath == petCustomPath && version == petSheetVersion) return
-        loadSheet(pet, context, customPath, version)
+    private suspend fun loadSheetIfChanged(
+        pet: PetOverlay,
+        context: android.content.Context,
+        customPath: String?,
+        version: Int,
+        bundle: String,
+    ) {
+        if (customPath == petCustomPath && version == petSheetVersion && bundle == petBundle) return
+        loadSheet(pet, context, customPath, version, bundle)
     }
 
     /**
      * Decoding the atlas takes a few dozen milliseconds and must stay off the main thread: a
      * blocked main thread during startup is exactly what makes Android show "app not responding".
      */
-    private suspend fun loadSheet(pet: PetOverlay, context: android.content.Context, customPath: String?, version: Int) {
+    private suspend fun loadSheet(
+        pet: PetOverlay,
+        context: android.content.Context,
+        customPath: String?,
+        version: Int,
+        bundle: String,
+    ) {
         val sheet = withContext(Dispatchers.Default) {
             runCatching {
                 customPath?.let { PetSpriteSheet.fromFile(File(it)) }
-                    ?: PetSpriteSheet.default(context)
+                    ?: PetSpriteSheet.default(context, bundle)
             }.getOrNull()
         }
         petCustomPath = customPath
         petSheetVersion = version
+        petBundle = bundle
         pet.setSheet(sheet)
     }
 
+    /**
+     * Double tap: open Xiaoman's own assistant panel. The system may refuse to promote a
+     * third-party voice service to the default digital assistant, so we host the same panel in an
+     * activity that also answers ACTION_ASSIST; if that cannot be launched, fall back to chat.
+     */
+    private fun openAssistant(service: XiaomanAccessibilityService): () -> Unit = {
+        val launched = runCatching {
+            service.startActivity(
+                Intent(service, AssistantActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
+        }.isSuccess
+        if (!launched) openChat(service).invoke()
+    }
+
+    /** Double tap: jump straight to the assistant conversation. */
     private fun openChat(service: XiaomanAccessibilityService): () -> Unit = {
         service.startActivity(Intent(service, MainActivity::class.java)
             .setAction(Notifier.ACTION_OPEN_CHAT)
@@ -171,12 +217,23 @@ class OverlayController(
         petOwner = null
         petCustomPath = null
         petSheetVersion = -1
+        petBundle = null
+        petScale = 1f
     }
+
+    private data class SheetPref(
+        val customPath: String?,
+        val version: Int,
+        val bundle: String,
+        val sizeScale: Float,
+    )
 
     private data class PetInput(
         val service: XiaomanAccessibilityService?,
         val customPath: String?,
         val sheetVersion: Int,
+        val bundle: String,
+        val sizeScale: Float,
         val position: PetPosition,
         val busy: Boolean,
         val outcome: Boolean?,

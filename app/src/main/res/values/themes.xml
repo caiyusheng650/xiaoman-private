@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Xiaoman" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Translucent panel host for the assistant activity, matching the voice session window. -->
+    <style name="Theme.Xiaoman.Assistant" parent="Theme.Xiaoman">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.28</item>
+    </style>
 </resources>

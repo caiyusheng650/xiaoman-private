@@ -144,6 +144,7 @@ private fun TopicInstructions(topic: SetupTopic) {
                 GuideStep(R.string.pet_guide_what_title, R.string.pet_guide_what_body)
                 GuideStep(R.string.pet_guide_get_title, R.string.pet_guide_get_body)
                 GuideStep(R.string.pet_guide_upload_title, R.string.pet_guide_upload_body)
+                GuideStep(R.string.pet_guide_tap_title, R.string.pet_guide_tap_body)
             }
         }
     }

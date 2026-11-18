@@ -44,9 +44,16 @@ class PetSpriteSheet private constructor(
         private const val MAX_COLS = 32
         private const val MAX_ROWS = 64
 
-        /** Load the default bundled sheet. */
-        fun default(context: Context): PetSpriteSheet? = runCatching {
-            context.assets.open("pet_default.png").use { decode(it) }
+        /** Bundled pack ids; kept here so the loader maps ids to asset names in one place. */
+        const val BUNDLE_DEFAULT = "default"
+        const val BUNDLE_CLASSIC = "classic"
+
+        private fun assetName(bundle: String): String =
+            if (bundle == BUNDLE_CLASSIC) "pet_classic.png" else "pet_default.png"
+
+        /** Load a bundled sheet by pack id; unknown ids fall back to the default pack. */
+        fun default(context: Context, bundle: String = BUNDLE_DEFAULT): PetSpriteSheet? = runCatching {
+            context.assets.open(assetName(bundle)).use { decode(it) }
         }.getOrNull()
 
         /** Load from a file on disk (user uploads land in private files dir). */

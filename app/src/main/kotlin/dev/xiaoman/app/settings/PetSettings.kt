@@ -17,9 +17,17 @@ class PetSettings(context: Context) {
     private val _enabled = MutableStateFlow(prefs.getBoolean(ENABLED, false))
     val enabled = _enabled.asStateFlow()
 
-    /** Path under [Context.getFilesDir] to the user-uploaded sheet; null → use bundled default. */
+    /** Path under [Context.getFilesDir] to the user-uploaded sheet; null → use the selected bundled pack. */
     private val _customPath = MutableStateFlow(prefs.getString(CUSTOM_PATH, null))
     val customPath = _customPath.asStateFlow()
+
+    /** Which bundled pack is active when no uploaded sheet overrides it. */
+    private val _bundle = MutableStateFlow(prefs.getString(BUNDLE, BUNDLE_DEFAULT) ?: BUNDLE_DEFAULT)
+    val bundle = _bundle.asStateFlow()
+
+    /** Size multiplier on top of the sheet's own frame size, persisted across restarts. */
+    private val _sizeScale = MutableStateFlow(prefs.getFloat(SIZE_SCALE, 1f).coerceIn(MIN_SCALE, MAX_SCALE))
+    val sizeScale = _sizeScale.asStateFlow()
 
     /** Bumped on every upload: the target path never changes, so this is what signals a reload. */
     private val _sheetVersion = MutableStateFlow(prefs.getInt(SHEET_VERSION, 0))
@@ -48,6 +56,19 @@ class PetSettings(context: Context) {
         _sheetVersion.value = version
     }
 
+    /** Select a bundled pack; an uploaded sheet still takes precedence until it is cleared. */
+    fun setBundle(id: String) {
+        val bundle = if (id == BUNDLE_CLASSIC) BUNDLE_CLASSIC else BUNDLE_DEFAULT
+        prefs.edit { putString(BUNDLE, bundle) }
+        _bundle.value = bundle
+    }
+
+    fun setSizeScale(scale: Float) {
+        val value = scale.coerceIn(MIN_SCALE, MAX_SCALE)
+        prefs.edit { putFloat(SIZE_SCALE, value) }
+        _sizeScale.value = value
+    }
+
     fun setPosition(xDp: Float, yDp: Float) {
         prefs.edit {
             putFloat(POS_X, xDp)
@@ -73,8 +94,15 @@ class PetSettings(context: Context) {
     }
 
     companion object {
+        const val BUNDLE_DEFAULT = "default"
+        const val BUNDLE_CLASSIC = "classic"
+        const val MIN_SCALE = 0.5f
+        const val MAX_SCALE = 2f
+
         private const val ENABLED = "enabled"
         private const val CUSTOM_PATH = "customPath"
+        private const val BUNDLE = "bundle"
+        private const val SIZE_SCALE = "sizeScale"
         private const val SHEET_VERSION = "sheetVersion"
         private const val POS_X = "posX"
         private const val POS_Y = "posY"

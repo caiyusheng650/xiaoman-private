@@ -174,11 +174,12 @@ private fun PetWorkingIndicator(pet: PetSettings) {
     val context = LocalContext.current
     val enabled by pet.enabled.collectAsState()
     val customPath by pet.customPath.collectAsState()
+    val bundle by pet.bundle.collectAsState()
     var frames by remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
-    LaunchedEffect(enabled, customPath) {
+    LaunchedEffect(enabled, customPath, bundle) {
         // The pill mirrors the desktop pet: with the pet switched off there is nothing to mirror,
         // so it stays a plain spinner and never decodes a sheet.
-        frames = if (!enabled) emptyList() else withContext(Dispatchers.IO) { loadWorkingFrames(context, customPath) }
+        frames = if (!enabled) emptyList() else withContext(Dispatchers.IO) { loadWorkingFrames(context, customPath, bundle) }
     }
     val current = frames
     if (current.isEmpty()) {
@@ -201,8 +202,8 @@ private fun PetWorkingIndicator(pet: PetSettings) {
 }
 
 /** Reads the working row and shrinks each frame to display size, so a whole sheet never stays in memory. */
-private fun loadWorkingFrames(context: Context, customPath: String?): List<ImageBitmap> {
-    val sheet = customPath?.let { PetSpriteSheet.fromFile(File(it)) } ?: PetSpriteSheet.default(context)
+private fun loadWorkingFrames(context: Context, customPath: String?, bundle: String): List<ImageBitmap> {
+    val sheet = customPath?.let { PetSpriteSheet.fromFile(File(it)) } ?: PetSpriteSheet.default(context, bundle)
     if (sheet == null || !sheet.isUsable()) return emptyList()
     return sheet.use { source ->
         // Same row order as the desktop pet; sheets without a working row fall back down the chain.

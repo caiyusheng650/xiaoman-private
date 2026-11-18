@@ -215,8 +215,12 @@
     <string name="pet_settings_title">Pet</string>
     <string name="pet_settings_description">Keep a little pet on screen that runs along while Xiaoman works. Drag it anywhere.</string>
     <string name="pet_enable">Show pet</string>
-    <string name="pet_default_active">Using the default look</string>
-    <string name="pet_custom_active">Using your uploaded image</string>
+    <string name="pet_bundle_default">Pet 1</string>
+    <string name="pet_bundle_classic">Pet 2</string>
+    <string name="pet_active_default1">Using your default pet 1</string>
+    <string name="pet_active_default2">Using your default pet 2</string>
+    <string name="pet_active_custom">Using your uploaded pet</string>
+    <string name="pet_size_title">Pet size</string>
     <string name="pet_upload">Upload image</string>
     <string name="pet_uploading">Uploading…</string>
     <string name="pet_reset_default">Reset to default</string>
@@ -231,6 +235,8 @@
     <string name="pet_guide_get_body">ChatGPT desktop pets, Shimeji pixel packs, or your own drawing. Any sheet with equal-size frames that split evenly works.</string>
     <string name="pet_guide_upload_title">How to upload</string>
     <string name="pet_guide_upload_body">Move the PNG to your phone, open Settings → Pet, and tap Upload image to pick it. The file is stored on-device, and the previous image is removed when you swap it.</string>
+    <string name="pet_guide_tap_title">Tapping the pet</string>
+    <string name="pet_guide_tap_body">A quick double tap opens the Xiaoman assistant panel; a single tap does nothing. Drag to move the pet anywhere on screen.</string>
     <string name="guide_open_failed">Could not open system settings. Open the Settings app on your phone.</string>
     <string name="guide_view_topic">View setup steps</string>
     <string name="assist_settings_guide">Setup steps</string>

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -64,8 +65,25 @@ class PetOverlay(private val context: Context) {
 
     /** Clicking the pet (not dragging) triggers this. */
     var onClick: () -> Unit = {}
+    /** A quick double tap on the pet triggers this instead of the single tap. */
+    var onDoubleClick: () -> Unit = {}
+
+    /** Timestamp of the last single tap, used to recognize a double tap. */
+    private var lastTapUp = 0L
+    /** Pended single-tap action, cancelled if a second tap arrives in time. */
+    private var singleTap: Runnable? = null
     /** Dragged to a new resting place so the host can persist coordinates. */
     var onRestAt: (xDp: Float, yDp: Float) -> Unit = { _, _ -> }
+
+    /** User-facing size multiplier on top of the sheet's own frame size. */
+    var scale: Float = 1f
+        private set
+
+    /** Apply a new size multiplier and resize the live window right away. */
+    fun setScale(value: Float) {
+        scale = value.coerceIn(0.5f, 2f)
+        if (isShowing) resizeToSheet()
+    }
 
     /** Load (or reload) the sprite sheet and start animating. */
     fun setSheet(newSheet: PetSpriteSheet?) {
@@ -136,6 +154,9 @@ class PetOverlay(private val context: Context) {
 
     fun hide() = onMain {
         stopAnim()
+        singleTap?.let { main.removeCallbacks(it) }
+        singleTap = null
+        lastTapUp = 0L
         val view = root ?: return@onMain
         root = null
         layoutParams = null
@@ -305,7 +326,20 @@ class PetOverlay(private val context: Context) {
                     }
                     stateBeforeDrag?.let { setState(it) }
                     stateBeforeDrag = null
-                    if (!moved && ev.action == MotionEvent.ACTION_UP) onClick()
+                    if (!moved && ev.action == MotionEvent.ACTION_UP) {
+                        val now = SystemClock.uptimeMillis()
+                        if (now - lastTapUp < DOUBLE_TAP_MS) {
+                            singleTap?.let { main.removeCallbacks(it) }
+                            singleTap = null
+                            lastTapUp = 0L
+                            onDoubleClick()
+                        } else {
+                            lastTapUp = now
+                            val pending = Runnable { onClick() }
+                            singleTap = pending
+                            main.postDelayed(pending, DOUBLE_TAP_MS)
+                        }
+                    }
                 }
             }
             true
@@ -316,7 +350,7 @@ class PetOverlay(private val context: Context) {
     private fun framePx(): Int {
         val density = context.resources.displayMetrics.density
         val base = sheet?.frameWidth?.toFloat() ?: return dp(72)
-        return (base * density / 2f).toInt().coerceAtLeast(24)
+        return (base * density / 2f * scale).toInt().coerceAtLeast(24)
     }
 
     private fun resizeToSheet() = onMain {
@@ -353,6 +387,8 @@ class PetOverlay(private val context: Context) {
     private companion object {
         /** Row used when the requested action has no frames in this sheet. */
         const val IDLE_ROW = 0
+        /** Two taps within this window count as a double tap. */
+        const val DOUBLE_TAP_MS = 250L
         const val TAG = "Xiaoman"
     }
 }
