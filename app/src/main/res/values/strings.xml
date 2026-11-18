@@ -254,7 +254,7 @@
     <string name="pet_guide_upload_title">怎么上传到小满</string>
     <string name="pet_guide_upload_body">把 PNG 传到手机后，打开「设置 → 宠物」，点「上传形象图」选中它就行。图片会存进小满自己的空间，换新图时旧图会自动删掉。</string>
     <string name="pet_guide_tap_title">怎么点宠物</string>
-    <string name="pet_guide_tap_body">快速双击打开小满的数字助手面板；单击不做任何操作。按住拖动可以把宠物放到屏幕任意位置。</string>
+    <string name="pet_guide_tap_body">快速双击进入小满主页面；单击不做任何操作。按住拖动可以把宠物放到屏幕任意位置。</string>
     <string name="guide_open_failed">无法打开系统设置，请从手机的「设置」应用进入。</string>
     <string name="guide_view_topic">查看配置步骤</string>
     <string name="assist_settings_guide">配置指南</string>

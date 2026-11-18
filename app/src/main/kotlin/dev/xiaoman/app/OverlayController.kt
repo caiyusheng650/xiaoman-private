@@ -1,7 +1,6 @@
 package dev.xiaoman.app
 
 import android.content.Intent
-import dev.xiaoman.app.assist.AssistantActivity
 import dev.xiaoman.app.session.AgentSession
 import dev.xiaoman.app.settings.AppLanguage
 import dev.xiaoman.app.settings.AppearanceSettings
@@ -112,8 +111,8 @@ class OverlayController(
                     val localized = appearance.localizedContext(service, appearance.language.value)
                     val fresh = PetOverlay(localized).also { p ->
                         // A single tap does nothing: it must not bring the app forward while the
-                        // user is aiming for a double tap. Only the double tap opens the panel.
-                        p.onDoubleClick = openAssistant(service)
+                        // user is aiming for a double tap. The double tap opens the Xiaoman app.
+                        p.onDoubleClick = openChat(service)
                         p.onRestAt = { x, y -> petSettings.setPosition(x, y) }
                     }
                     pet = fresh
@@ -181,21 +180,7 @@ class OverlayController(
         pet.setSheet(sheet)
     }
 
-    /**
-     * Double tap: show Xiaoman's assistant panel only. The main app page is never brought
-     * forward from the pet; if the panel cannot be launched, do nothing rather than opening
-     * the chat screen.
-     */
-    private fun openAssistant(service: XiaomanAccessibilityService): () -> Unit = {
-        runCatching {
-            service.startActivity(
-                Intent(service, AssistantActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            )
-        }
-    }
-
-    /** Open the chat screen from the progress pill; not used by the pet double tap. */
+    /** Open the Xiaoman main page; used by the pet double tap and the progress pill. */
     private fun openChat(service: XiaomanAccessibilityService): () -> Unit = {
         service.startActivity(Intent(service, MainActivity::class.java)
             .setAction(Notifier.ACTION_OPEN_CHAT)
