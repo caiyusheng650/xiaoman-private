@@ -182,21 +182,20 @@ class OverlayController(
     }
 
     /**
-     * Double tap: open Xiaoman's own assistant panel. The system may refuse to promote a
-     * third-party voice service to the default digital assistant, so we host the same panel in an
-     * activity that also answers ACTION_ASSIST; if that cannot be launched, fall back to chat.
+     * Double tap: show Xiaoman's assistant panel only. The main app page is never brought
+     * forward from the pet; if the panel cannot be launched, do nothing rather than opening
+     * the chat screen.
      */
     private fun openAssistant(service: XiaomanAccessibilityService): () -> Unit = {
-        val launched = runCatching {
+        runCatching {
             service.startActivity(
                 Intent(service, AssistantActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             )
-        }.isSuccess
-        if (!launched) openChat(service).invoke()
+        }
     }
 
-    /** Double tap: jump straight to the assistant conversation. */
+    /** Open the chat screen from the progress pill; not used by the pet double tap. */
     private fun openChat(service: XiaomanAccessibilityService): () -> Unit = {
         service.startActivity(Intent(service, MainActivity::class.java)
             .setAction(Notifier.ACTION_OPEN_CHAT)
